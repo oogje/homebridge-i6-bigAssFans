@@ -30,22 +30,16 @@ issue a command (e.g., turn on the light) as oppposed to the periodic probe mess
 * Turn Whoosh Mode on or off.
 * Turn Dim to Warm on or off.
 
-## Installation
+### Installation
 
-If you are new to homebridge, please first read the homebridge [documentation](https://github.com/homebridge/homebridge#readme).
-If you are running on a Raspberry, you will find a tutorial in the [homebridge wiki](https://github.com/homebridge/homebridge/wiki/Install-Homebridge-on-Raspbian).
+If you are not already running homebridge you'll find how to install it in the homebridge [documentation](https://github.com/homebridge/homebridge#readme).  After you install homebridge you can install and configure the homebridge-i6-bigassfans plugin through homebridge-config-ui-x using a command line and editor as described below.
 
-Install homebridge:
-```sh
-sudo npm install -g homebridge
-```
-
-Install homebridge-i6-bigassfans:
+#### Install homebridge-i6-bigassfans:
 ```sh
 sudo npm install -g homebridge-i6-bigassfans@beta
 ```
 
-## Configuration
+#### Configuration
 
 Add the `BigAssFans-i6` platform in `config.json` in your home directory inside `.homebridge`.
 
@@ -90,7 +84,7 @@ Adds accessory switch for Whoosh Mode (true/false)
 - `dimToWarm` [optional]
 Adds accessory switch for Dim to Warm (true/false)
 
-## Troubleshooting
+### Troubleshooting
 If you have any issues with the plugin or fan services then you can run Homebridge in debug mode, which will provide some additional information. This might be useful for debugging issues.
 
 Homebridge debug mode:
@@ -98,9 +92,9 @@ Homebridge debug mode:
 homebridge -D
 ```
 
-For the mega debug log, add the following to your config.json:
+For the mega debug log, add the following to your config.json or using homebridge-config-ui-x :
 ```json
-"deepDebugLog": <specify a number or the word MAX>
+"megaDebugLevel": <specify a number or the word MAX>
 ```
 This will enable extra logging which might be helpful to debug all kind of issues.
 
@@ -111,4 +105,4 @@ This will enable extra logging which might be helpful to debug all kind of issue
 
 [HAP-NodeJS](https://github.com/KhaosT/HAP-NodeJS) & [homebridge](https://github.com/nfarina/homebridge) - for making this possible.
 
-[Big Ass Fans](https://www.bigassfans.com) - who is presuably hard at work on their Homekit implementation.
+[Big Ass Fans](https://www.bigassfans.com) - who I hope is hard at work on their Homekit implementation.
