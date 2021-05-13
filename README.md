@@ -10,15 +10,15 @@
 
 </span>
 
-`homebridge-bigassfans-i6 ` is a plugin for Homebridge which allows you to control a Big Ass Fans model i6.
+`homebridge-i6-bigassfans` is a plugin for Homebridge which allows you to control a Big Ass Fans model i6.
 
-This work in progress is my first plugin and first time I've used javascript, let alone Node.js or typescript.  This works 
+This work in progress is my first plugin and first project using javascript, let alone Node.js or typescript.  This works 
 with my LED equipped i6 fan.  I'm hoping it works for you.  I created the plugin by observing network traffic and for the 
 most part guessing the format of the binary messages that were sent to and from the fan.  Of the appoximately 80 unique 
 message types I've seen, I think I know what about half of them probably mean.
 
 ### Bugs
-The network connection to the fan will reset occasionally.  I try to handle that gracefully but if it happens when you
+The network connection to the fan will reset on occassion.  I try to handle that gracefully but if it happens when you
 issue a command (e.g., turn on the light) as oppposed to the periodic probe message, the command will be ignored.  Try again after two seconds.
 
 
@@ -38,9 +38,9 @@ Install homebridge:
 sudo npm install -g homebridge
 ```
 
-Install homebridge-bigassfans-i6:
+Install homebridge-i6-bigassfans:
 ```sh
-sudo npm install -g homebridge-bigassfans-i6@beta
+sudo npm install -g homebridge-i6-bigassfans@beta
 ```
 
 ## Configuration
