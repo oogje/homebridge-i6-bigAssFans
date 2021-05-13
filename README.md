@@ -27,6 +27,8 @@ issue a command (e.g., turn on the light) as oppposed to the periodic probe mess
 * Change speed, and direction (keep in mind Big Ass Fans frowns on reversing speed.)
 * Change brightness level of LED lamp.
 * See the fan's bluetooth remote's temperature and humidity sensors.
+* Turn Whoosh Mode on or off.
+* Turn Dim to Warm on or off.
 
 ## Installation
 
