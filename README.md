@@ -32,7 +32,7 @@ issue a command (e.g., turn on the light) as oppposed to the periodic probe mess
 
 ### Installation
 
-If you are not already running homebridge you'll find how to install it in the homebridge [documentation](https://github.com/homebridge/homebridge#readme).  After you install homebridge you can install and configure the homebridge-i6-bigassfans plugin through homebridge-config-ui-x using a command line and editor as described below.
+If you are not already running homebridge you'll find how to install it in the homebridge [documentation](https://github.com/homebridge/homebridge#readme).  After you install homebridge you can install and configure the `homebridge-i6-bigassfans` plugin through `homebridge-config-ui-x` using a command line and editor as described below.
 
 #### Install homebridge-i6-bigassfans:
 ```sh
