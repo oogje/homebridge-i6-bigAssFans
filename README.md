@@ -1,6 +1,6 @@
 <span align="center">
 
-# homebridge-bigassfans-i6
+# homebridge-i6-bigassfans
 
 <!-- [![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins) -->
 <!-- [![homebridge-miot](https://badgen.net/npm/v/homebridge-bigassfans-i6?icon=npm)](https://www.npmjs.com/package/homebridge-bigassfans-i6)
