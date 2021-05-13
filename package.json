@@ -1,16 +1,16 @@
 {
-  "private": true,
-  "displayName": "Plugin Name",
-  "name": "homebridge-plugin-name",
-  "version": "1.0.0",
-  "description": "A short description about what your plugin does.",
-  "license": "Apache-2.0",
+  "private": false,
+  "displayName": "Big Ass Fans i6",
+  "name": "homebridge-i6-bigassfans",
+  "version": "0.1.0",
+  "description": "Homebridge plugin for Big Ass Fans model i6.",
+  "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git://github.com/USERNAME/GITHUB_PROJECT_NAME.git"
+    "url": "https://github.com/oogje/homebridge-i6-bigAssFans"
   },
   "bugs": {
-    "url": "https://github.com/USERNAME/GITHUB_PROJECT_NAME/issues"
+    "url": "https://github.com/oogje/homebridge-i6-bigAssFans/issues"
   },
   "engines": {
     "node": ">=10.17.0",
@@ -24,9 +24,12 @@
     "prepublishOnly": "npm run lint && npm run build"
   },
   "keywords": [
-    "homebridge-plugin"
+    "homebridge-plugin",
+    "big-ass-fans",
+    "ceiling-fan",
+    "fan",
+    "i6"
   ],
-  "dependencies": {},
   "devDependencies": {
     "@types/node": "^14.14.31",
     "@typescript-eslint/eslint-plugin": "^4.16.1",

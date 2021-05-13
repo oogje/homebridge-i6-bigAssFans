@@ -1,15 +1,59 @@
 {
-  "pluginAlias": "ExampleHomebridgePlugin",
+  "pluginAlias": "BigAssFans-i6",
   "pluginType": "platform",
   "singular": true,
+  "headerDisplay": "Homebridge plugin for Big Ass Fans i6",
+  "footerDisplay": "For a detailed description, see the [README](https://github.com/oogje/homebridge-i6-bigassfans#platform-configuration-fields)",
   "schema": {
     "type": "object",
     "properties": {
-      "name": {
-        "title": "Name",
-        "type": "string",
-        "required": true,
-        "default": "Example Dynamic Platform"
+      "fans": {
+        "title": "Fans:",
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "name": {
+                "title": "Name",
+                "description": "The name of the fan.",
+                "type": "string",
+                "minLength": 1,
+                "required": true,
+                "default": "i6 fan"
+            },
+            "ip": {
+              "title": "Fan IP address",
+              "description": "The IP address of the fan.",
+              "type": "string",
+              "format": "ipv4",
+              "required": true
+            },
+            "mac": {
+              "title": "MAC address",
+              "description": "The MAC address of the fan.",
+              "type": "string",
+              "required": true
+            },
+            "whoosh": {
+              "title": "Whoosh Switch",
+              "description": "Add a switch for 'Whoosh Mode'",
+              "type": "boolean",
+              "default": false
+            },
+            "dimToWarm": {
+              "title": "Dim to Warm Switch",
+              "description": "Add a switch for 'Dim to Warm'",
+              "type": "boolean",
+              "default": false
+            },
+            "megaDebugLevel": {
+              "title": "Enable extra debug messages",
+              "description": "Enables, and sets, level of more detailed debugging messages. 0 means no extra debug messages.  MAX is shorthand for the highest level - which can be more than 11",
+              "type": "string",
+              "default": "0"
+            }
+          }
+        }  
       }
     }
   }
