@@ -12,8 +12,6 @@
 
 `homebridge-i6-bigassfans` is a plugin for Homebridge which allows you to control a Big Ass Fans model i6.
 
-If anyone 
-
 This work in progress is my first plugin and first project using javascript, let alone Node.js or typescript.  This works 
 with my LED equipped i6 fan.  I'm hoping it works for you.  I created the plugin by observing network traffic and for the 
 most part guessing the format of the binary messages that were sent to and from the fan.  Of the appoximately 80 unique 
