@@ -1,37 +1,17 @@
 /* eslint-disable no-multi-spaces */
-/**
- * record last message received for debugging
- *
- * check what fan says name/mac are against the config file and warn?  If IP is wrong all bets are off anyway.
- *
- * test multiple fans in config file.   maybe code a dummy fan with a self assigned ip - 169.254.nnn.nnn
- *
- * more switches!
- *
- * implement max retries and backoffs on network errors?
- *
- * figure out how to decode the type 11 message chunks.
- *
- * still don't understand Promise<CharacteristicValue> in the Get function declarations that came with the example template.
- *
- * use Characteristic props for range checking Get/Set values
- *
- * resend command on network error.  but so far haven't been able to determine which write failed to make it to the fan,
- * so can't resend.
- *
- * try socket level keepalives
- *
- * nevermind the chunk headers, don't understand them so can't count on them.  Just send all messages on to be processed.
- *
- * bigAssNumber function is inaccurate with numbers above 44K or so. Need to figure that out.
- *
- */
 
-import { Service, PlatformAccessory, CharacteristicValue } from 'homebridge';
+import { Service, PlatformAccessory, CharacteristicValue, Logger } from 'homebridge';
 import { BigAssFans_i6Platform } from './platform';
 
 // https://stackoverflow.com/questions/38875401/getting-error-ts2304-cannot-find-name-buffer
 declare const Buffer; // this seems to ward off typescripts whining about buffer methods such as length, etc.
+
+let hbLog: Logger;
+const debugLevels:number[] = [];
+debugLevels['cluing'] = 3;
+debugLevels['network'] = 3;
+debugLevels['progress'] = 3;
+debugLevels['characteristics'] = 3;
 
 const ESC = 0xDB;
 const START = 0xc0;
@@ -40,11 +20,13 @@ const START_STUFF = 0xDC;
 
 const MAXFANSPEED = 7;
 
-const MAXMEGADEBUGLEVEL = 99;
+const MAXEBUGLEVEL = 99;
 
 // property table columns
 const DECODEVALUEFUNCTION = 0;
 const PROPERTYHANDLERFUNCTION = 1;
+const ONEBYTEHEADER = [0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03];
+
 
 export class BigAssFans_i6PlatformAccessory {
   public fanService!: Service;
@@ -54,9 +36,6 @@ export class BigAssFans_i6PlatformAccessory {
   public whooshSwitchService!: Service;
   public dimToWarmSwitchService!: Service;
 
-  // public lightOnState: boolean|undefined = undefined;
-  // public brightness: number|undefined  = undefined;
-  // public colorTemperature: number|undefined  = undefined;
   public lightStates = {
     On: true,
     Brightness: 1,  // percent
@@ -88,9 +67,6 @@ export class BigAssFans_i6PlatformAccessory {
   public CurrentRelativeHumidity = 0;
 
   public client;
-  public writeQueue: Buffer[] = [];
-  public lastWrite!: Buffer;
-  public lastBufferFromFan!: Buffer;
 
   mysteryProperties: string|number[] = [];  // to keep track of when they change - for hints to eventually figure out what they mean
   /**
@@ -103,15 +79,32 @@ export class BigAssFans_i6PlatformAccessory {
     public readonly platform: BigAssFans_i6Platform,
     private readonly accessory: PlatformAccessory,
   ) {
+    hbLog = platform.log;
     this.IP = accessory.context.device.ip;
     this.MAC = accessory.context.device.mac;
-    if (accessory.context.device.megaDebugLevel.toLowerCase() === 'max' ||
-        (accessory.context.device.megaDebugLevel as number) > MAXMEGADEBUGLEVEL) {
-      this.debugLevel = MAXMEGADEBUGLEVEL;
+
+    // deprecating megaDebugLevel - but will interpret it for the time being
+    if (accessory.context.device.megaDebugLevel !== undefined) {
+      hbLog.warn('"megaDebugLevel" in configuration is deprecated.');
+      if (accessory.context.device.megaDebugLevel.toLowerCase() === 'max' ||
+      (accessory.context.device.megaDebugLevel as number) > MAXEBUGLEVEL) {
+        this.debugLevel = MAXEBUGLEVEL;
+      } else {
+        this.debugLevel = this.accessory.context.device.megaDebugLevel as number;
+      }
+      debugLog('progress', 1, 'megaDebugLevel:' + (this.accessory.context.device.megaDebugLevel as number));
+      for (const index in debugLevels) {
+        debugLevels[index] = this.debugLevel;
+      }
     } else {
-      this.debugLevel = this.accessory.context.device.megaDebugLevel as number;
+      this.debugLevel = 3;
     }
-    megaDebug(this, 1, 'megaDebugLevel:' + (this.accessory.context.device.megaDebugLevel as number));
+
+    // this is the replacement debug logging thing
+    for (const debugEntry of this.accessory.context.device.debugLevels) {
+      const entry:(string | number)[] = debugEntry as (string | number)[];
+      debugLevels[entry[0]] = entry[1];
+    }
 
     if (accessory.context.device.whoosh) {
       this.showWhooshSwitch = true; // defaults to false in property initialization
@@ -131,12 +124,6 @@ export class BigAssFans_i6PlatformAccessory {
       .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Big Ass Fans')
       .setCharacteristic(this.platform.Characteristic.Model, 'i6')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, this.MAC);
-
-    // const foo =   this.accessory.getService(this.platform.Service.Fan);
-    // const bar = foo?.getCharacteristic(this.platform.Characteristic.RotationSpeed)?.setProps();
-    // const bar = foo?.getCharacteristic(this.platform.Characteristic.RotationSpeed)?.props;
-    // const gorp = foo?.getCharacteristic(this.platform.Characteristic.RotationSpeed)?.value;
-    // console.log(bar);
 
     // Fan
     this.fanService = this.accessory.getService(this.platform.Service.Fan) ||
@@ -226,27 +213,25 @@ export class BigAssFans_i6PlatformAccessory {
     * open the fan's communication port, establish the data and error callbacks, send the initialization sequence  and start
     * the keepalive
     */
-    commsSetup(this);
-
-    megaDebug(this, 1, 'constructed');
+    networkSetup(this);
+    debugLog('progress', 1, 'constructed');
   }
 
   /**
   * 'SET' request is issued when HomeKit wants us to change the state of an accessory.
   * 'GET' request is issued  when HomeKit wants to know the state of an accessory.
   */
+
   async setLightOnState(value: CharacteristicValue) {
-    megaDebug(this, 1, 'Set Characteristic Light On ->' + value);
+    debugLog('characteristics',  1, 'Set Characteristic Light On ->' + value);
     this.lightStates.On = value as boolean;
-    const b = Buffer.from([0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03, 0xa0, 0x04, (this.lightStates.On ? 0x01 : 0x00), 0xc0]);
-    megaDebug(this, 7, 'sending ' + b.toString('hex'));
-    this.lastWrite = b;
-    this.client.write(b);
+    clientWrite(this.client,
+      Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, (this.lightStates.On ? 0x01 : 0x00), 0xc0])));
   }
 
   async getLightOnState(): Promise<CharacteristicValue> {
     const isOn = this.lightStates.On;
-    megaDebug(this, 1, 'Get Characteristic Light On ->' + isOn);
+    debugLog('characteristics', 1, 'Get Characteristic Light On ->' + isOn);
     // if you need to return an error to show the device as 'Not Responding' in the Home app:
     // throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     return isOn;
@@ -255,30 +240,28 @@ export class BigAssFans_i6PlatformAccessory {
   async setBrightness(value: CharacteristicValue) {
     let b: Buffer;
     if (value === 0) {
-      megaDebug(this, 1, 'Set Characteristic Brightness -> ' + value);
+      debugLog('characteristics', 1, 'Set Characteristic Brightness -> ' + value);
       this.lightStates.homeShieldUp = true;
       this.lightStates.Brightness = 0;
-      b = Buffer.from([0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03, 0xa8, 0x04, 1, 0xc0, // this one is for the device's memory
-        0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03, 0xa8, 0x04, 0, 0xc0]);  // this one is actually turn off light
+      const b1 = ONEBYTEHEADER.concat([0xa8, 0x04, 1, 0xc0]); // this one is for the device's memory
+      const b2 = ONEBYTEHEADER.concat([0xa8, 0x04, 0, 0xc0]); // this one is actually turn off light
+      b = Buffer.from(b1.concat(b2));
     } else if (value === 100 && this.lightStates.homeShieldUp) {
       this.lightStates.homeShieldUp = false;
       this.lightStates.Brightness = 1;
-      b = Buffer.from([0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03, 0xa8, 0x04, 1, 0xc0]);
+      b = Buffer.from(ONEBYTEHEADER.concat([0xa8, 0x04, 1, 0xc0]));
     } else {
       this.lightStates.homeShieldUp = false;
-      megaDebug(this, 1, 'Set Characteristic Brightness -> ' + value);
+      debugLog('characteristics', 1, 'Set Characteristic Brightness -> ' + value);
       this.lightStates.Brightness = value as number;
-      b = Buffer.from([0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03, 0xa8, 0x04, this.lightStates.Brightness, 0xc0]);
+      b = Buffer.from(ONEBYTEHEADER.concat([0xa8, 0x04, this.lightStates.Brightness, 0xc0]));
     }
-
-    megaDebug(this, 7, 'sending ' + b.toString('hex'));
-    this.lastWrite = b;
-    this.client.write(b);
+    clientWrite(this.client.write, b);
   }
 
   async getBrightness(): Promise<CharacteristicValue> {
     const brightness = (this.lightStates.Brightness === 0 ? 1 : this.lightStates.Brightness);
-    megaDebug(this, 2, 'Get Characteristic Brightness ->' + brightness);
+    debugLog('characteristics', 2, 'Get Characteristic Brightness ->' + brightness);
     return brightness;
   }
 
@@ -289,55 +272,51 @@ export class BigAssFans_i6PlatformAccessory {
       this.platform.log.warn('temperature out of bounds: ', temperature);
       return 0;
     }
-    megaDebug(this, 2, 'Get Characteristic CurrentTemperature ->' + temperature);
+    debugLog('characteristics', 2, 'Get Characteristic CurrentTemperature ->' + temperature);
     return temperature;
   }
 
   async getCurrentRelativeHumidity(): Promise<CharacteristicValue> {
     const humidity = this.CurrentRelativeHumidity;
-    megaDebug(this, 2, 'Get Characteristic CurrentRelativeHumidity ->' + humidity);
+    debugLog('characteristics', 2, 'Get Characteristic CurrentRelativeHumidity ->' + humidity);
     return humidity;
   }
 
   async setFanOnState(value: CharacteristicValue) {
-    megaDebug(this, 2, 'Set Characteristic Fan On ->' + value);
+    debugLog('characteristics', 2, 'Set Characteristic Fan On ->' + value);
     this.fanStates.On = value as boolean;
-    const b = Buffer.from([0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03, 0xd8, 0x02, (this.fanStates.On ? 0x01 : 0x00), 0xc0]);
-    megaDebug(this, 7, 'sending ' + b.toString('hex'));
-    this.lastWrite = b;
-    this.client.write(b);
+    clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xd8, 0x02, (this.fanStates.On ? 0x01 : 0x00), 0xc0])));
   }
 
   async getFanOnState(): Promise<CharacteristicValue> {
     const isOn = this.fanStates.On;
-    megaDebug(this, 2, 'Get Characteristic Fan On ->' + isOn);
+    debugLog('characteristics', 2, 'Get Characteristic Fan On ->' + isOn);
     return isOn;
   }
 
   async setRotationSpeed(value: CharacteristicValue) {
     let b: Buffer;
     if (value === 0) {
-      megaDebug(this, 2, 'Set Characteristic RotationSpeed -> ' + (value as number) + '%');
+      debugLog('characteristics', 2, 'Set Characteristic RotationSpeed -> ' + (value as number) + '%');
       this.fanStates.homeShieldUp = true;
       this.fanStates.RotationSpeed = 0;
-      b = Buffer.from([0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03, 0xf0, 0x02, 1, 0xc0, // this one is for the device's memory
-        0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03, 0xf0, 0x02, 0, 0xc0]);  // this one will actually stop rotation
+      const b1 = ONEBYTEHEADER.concat([0xf0, 0x02, 1, 0xc0]); // this one is for the device's memory
+      const b2 = ONEBYTEHEADER.concat([0xf0, 0x02, 0, 0xc0]); // this one will actually stop rotation
+      b = Buffer.from(b1.concat(b2));
     } else if (value === 100 && this.fanStates.homeShieldUp) {
       this.fanStates.homeShieldUp = false;
       this.fanStates.RotationSpeed = 1;
-      b = Buffer.from([0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03, 0xf0, 0x02, 1, 0xc0]);
+      b = Buffer.from(ONEBYTEHEADER.concat([0xf0, 0x02, 1, 0xc0]));
     } else {
       this.fanStates.homeShieldUp = false;
-      megaDebug(this, 2, 'Set Characteristic RotationSpeed -> ' + (value as number) + '%');
+      debugLog('characteristics', 2, 'Set Characteristic RotationSpeed -> ' + (value as number) + '%');
       this.fanStates.RotationSpeed = Math.round(((value as number) / 100) * MAXFANSPEED);
       if (this.fanStates.RotationSpeed > MAXFANSPEED) {
         this.platform.log.warn('ignoring fan speed > ' + MAXFANSPEED + ': ' + this.fanStates.RotationSpeed);
       }
-      b = Buffer.from([0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03, 0xf0, 0x02, this.fanStates.RotationSpeed, 0xc0]);
+      b = Buffer.from(ONEBYTEHEADER.concat([0xf0, 0x02, this.fanStates.RotationSpeed, 0xc0]));
     }
-    megaDebug(this, 7, 'sending ' + b.toString('hex'));
-    this.lastWrite = b;
-    this.client.write(b);
+    clientWrite(this.client, b);
   }
 
   async getRotationSpeed(): Promise<CharacteristicValue> {  // get speed as percentage
@@ -345,110 +324,98 @@ export class BigAssFans_i6PlatformAccessory {
     if (rotationPercent === 0) {
       rotationPercent = 1;
     }
-    megaDebug(this, 2, 'Get Characteristic RotationSpeed ->' + rotationPercent + '%');
+    debugLog('characteristics', 2, 'Get Characteristic RotationSpeed ->' + rotationPercent + '%');
     return rotationPercent;
   }
 
   async setRotationDirection(value: CharacteristicValue) {
-    megaDebug(this, 2, 'Set Characteristic RotationDirection -> ' + value);
+    debugLog('characteristics', 2, 'Set Characteristic RotationDirection -> ' + value);
     this.fanStates.RotationDirection = value as number;
-    const b = Buffer.from([0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03, 0xe0, 0x02, value, 0xc0]); // 0 is clockwise, 1 is counterclockwise
-    megaDebug(this, 7, 'sending ' + b.toString('hex'));
-    this.lastWrite = b;
-    this.client.write(b);
+    clientWrite(this.client,
+      Buffer.from(ONEBYTEHEADER.concat([0xe0, 0x02, this.fanStates.RotationDirection, 0xc0]))); // 0 is clockwise, 1 is counterclockwise
   }
 
   async getRotationDirection(): Promise<CharacteristicValue> {
     const rotationDirection = this.fanStates.RotationDirection;
-    megaDebug(this, 2, 'Get Characteristic RotationDirection ->' + rotationDirection);
+    debugLog('characteristics', 2, 'Get Characteristic RotationDirection ->' + rotationDirection);
     return rotationDirection;
   }
 
   // Mireds!
   async setColorTemperature(value: CharacteristicValue) {
-    megaDebug(this, 2, 'Set Characteristic ColorTemperature  -> ' + value);
+    debugLog('characteristics', 2, 'Set Characteristic ColorTemperature  -> ' + value);
     this.lightStates.ColorTemperature = Math.round(1000000/(value as number));
     const bigNumberArray = stuffed(makeBigAssNumberValues(this.lightStates.ColorTemperature));
-    // megaDebug(this, 2, 'bigNumberValues.length: ' + bigNumberArray.length);
     const firstPart = [0xc0, 0x12, bigNumberArray.length + 6, 0x12, bigNumberArray.length + 4, 0x1a,
       bigNumberArray.length + 2, 0xb8, 0x04];
-    const b = Buffer.from(firstPart.concat(bigNumberArray, 0xc0));
-    megaDebug(this, 7, 'sending ' + b.toString('hex'));
-    this.lastWrite = b;
-    this.client.write(b);
+    clientWrite(this.client, Buffer.from(firstPart.concat(bigNumberArray, 0xc0)));
   }
 
   async getColorTemperature(): Promise<CharacteristicValue> {
     const colorTemperature = Math.round(1000000 / this.lightStates.ColorTemperature);
-    megaDebug(this, 2, 'Get Characteristic ColorTemperature ->' + colorTemperature);
+    debugLog('characteristics', 2, 'Get Characteristic ColorTemperature ->' + colorTemperature);
     return colorTemperature;
   }
 
   // set/get won't get called unless showWhooshSwitch is true
   async setWhooshSwitchOnState(value: CharacteristicValue) {
-    megaDebug(this, 2, 'Set Characteristic Whoosh Switch On ->' + value);
+    debugLog('characteristics', 2, 'Set Characteristic Whoosh Switch On ->' + value);
     this.whooshSwitchOn = value as boolean;
-    const b = Buffer.from([0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03, 0xd0, 0x03, (this.whooshSwitchOn ? 0x01 : 0x00), 0xc0]);
-    megaDebug(this, 7, 'sending ' + b.toString('hex'));
-    this.lastWrite = b;
-    this.client.write(b);
+    clientWrite(this.client,
+      Buffer.from(ONEBYTEHEADER.concat([0xd0, 0x03, (this.whooshSwitchOn ? 0x01 : 0x00), 0xc0])));
   }
 
   async getWhooshSwitchOnState(): Promise<CharacteristicValue> {
     const isOn = this.whooshSwitchOn;
-    megaDebug(this, 2, 'Get Characteristic Whoosh Switch On ->' + isOn);
+    debugLog('characteristics', 2, 'Get Characteristic Whoosh Switch On ->' + isOn);
     return isOn;
   }
 
   // set/get won't get called unless showDimToWarmSwitch is true
   async setDimToWarmSwitchOnState(value: CharacteristicValue) {
-    megaDebug(this, 2, 'Set Characteristic Dim to Warm Switch On ->' + value);
+    debugLog('characteristics', 2, 'Set Characteristic Dim to Warm Switch On ->' + value);
     this.dimToWarmSwitchOn = value as boolean;
-    const b = Buffer.from([0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03, 0xe8, 0x04, (this.dimToWarmSwitchOn ? 0x01 : 0x00), 0xc0]);
-    megaDebug(this, 7, 'sending ' + b.toString('hex'));
-    this.lastWrite = b;
-    this.client.write(b);
+    clientWrite(this.client,
+      Buffer.from(ONEBYTEHEADER.concat([0xe8, 0x04, (this.dimToWarmSwitchOn ? 0x01 : 0x00), 0xc0])));
   }
 
   async getDimToWarmSwitchOnState(): Promise<CharacteristicValue> {
     const isOn = this.dimToWarmSwitchOn;
-    megaDebug(this, 2, 'Get Characteristic Dim to Warm Switch On ->' + isOn);
+    debugLog('characteristics', 2, 'Get Characteristic Dim to Warm Switch On ->' + isOn);
     return isOn;
   }
 
 }
 
-  import net = require('net');
+import net = require('net');
 /**
 * connect to the fan, send an initialization message, establish the error and data callbacks and start a keep-alive interval timer.
 */
-function commsSetup(platformAccessory: BigAssFans_i6PlatformAccessory) {
-  const initMessage = 'c0 12 02 1a 00 c0';
+function networkSetup(platformAccessory: BigAssFans_i6PlatformAccessory) {
   platformAccessory.client = net.connect(31415, platformAccessory.IP, () => {
-    megaDebug(platformAccessory, 1, 'connected!');
+    debugLog('progress', 1, 'connected!');
     platformAccessory.client.setKeepAlive(true);
-    const sa = initMessage.split(' ');
-    const ha: number[] = [];
-    for (let i = 0; i < sa.length; ++i) {
-      ha[i] = parseInt('0x' + sa[i]);
-    }
-    const b = Buffer.from(ha);
-    megaDebug(platformAccessory, 7, 'sending ' + b.toString('hex'));
-    platformAccessory.lastWrite = b;
-    platformAccessory.client.write(b);
+
+    clientWrite(platformAccessory.client, Buffer.from([0xc0, 0x12, 0x02, 0x1a, 0x00, 0xc0]));
   });
 
   let errHandler;
 
   platformAccessory.client.on('error', errHandler = (err) => {
-    if (err.code === 'ECONNRESET'|| err.code === 'ECONNRESET') {
+    if (err.code === 'ECONNRESET') {
       platformAccessory.platform.log.warn('Fan network connection reset. Attempting reconnect in 2 seconds.');
+    } else if (err.code === 'EPIPE') {
+      platformAccessory.platform.log.warn('Fan network connection broke. Attempting reconnect in 2 seconds.');
+    } else if (err.code === 'ETIMEDOUT') {
+      platformAccessory.platform.log.warn('Fan connection timed out.  '  +
+        'Check that your fan has power and the correct IP is in json.config.');
+    } else if (err.code === 'ECONNREFUSED') {
+      platformAccessory.platform.log.warn('Fan connection refused.  '  +
+          'Check that the correct IP is in json.config.');
     } else {
       platformAccessory.platform.log.warn('Unhandled network error: ' + err.code + '.  Attempting reconnect in 2 seconds.');
     }
-    // megaDebug(platformAccessory, 3, 'lastBufferFromFan: ' + hexFormat(platformAccessory.lastBufferFromFan));
-    // platform.log.debug(err);
-    // megaDebug(platformAccessory, 2, 'platformAccessory.lastWrite: ' + hexFormat(platformAccessory.lastWrite));
+    platformAccessory.client = undefined;
     setTimeout(() => {
       // already did this one or more times, don't need to send initilization message
       platformAccessory.client = net.connect(31415, platformAccessory.IP, () => {
@@ -471,22 +438,24 @@ function commsSetup(platformAccessory: BigAssFans_i6PlatformAccessory) {
   });
 
   // attempt to prevent the occassional socket reset.
-  // sending the mysterious code that the vendor app seems to send once every minute didn't prevent it.
-  // can try going to every 15 seconds like the vendor app seems to do.
-  // perhaps I need to call socket.setKeepAlive([enable][, initialDelay]) when I establish it above?
-  // obviously, I don't unerstand this stuff
+  // sending the mysterious code that the vendor app seems to send once every 15s but I'll go with every minute -  didn't prevent it.
+  // can try going to every 15 seconds like the vendor app seems to do. - didn't work
+  // perhaps I need to call socket.setKeepAlive([enable][, initialDelay]) when I establish it above? - nope, didn't help
+  // obviously, I don't understand this stuff.
+  // now I got an EPIPE 5+ hours after a reset, and repeaated EPIPEs evert minute for the next 7 minutes, then one more after 4 minutes
+  // then clear sailing for 1+ hours so far.
   setInterval(( )=> {
-    const b = Buffer.from([0xc0, 0x12, 0x04, 0x1a, 0x02, 0x08, 0x03, 0xc0]);
-    platformAccessory.lastWrite = b;
-    platformAccessory.client.write(b);
+    if (platformAccessory.client !== undefined) {
+      clientWrite(platformAccessory.client, Buffer.from([0xc0, 0x12, 0x04, 0x1a, 0x02, 0x08, 0x03, 0xc0]));
+    } else {
+      debugLog('network', 3, 'client undefined in setInterval callback');
+    }
   }, 60000);
 }
 
 function onData(platformAccessory: BigAssFans_i6PlatformAccessory, data: Buffer) {
-  megaDebug(platformAccessory, 11, 'raw data: ' + hexFormat(data));
-  megaDebug(platformAccessory, 8, 'accessory client got: ' + data.length + ' bytes');
-
-  platformAccessory.lastBufferFromFan = data;
+  debugLog('network', 11, 'raw data: ' + hexFormat(data));
+  debugLog('network', 8, 'accessory client got: ' + data.length + ' bytes');
 
   // break data into individual chunks bracketed by 0xc0
   let startIndex = -1;
@@ -511,7 +480,7 @@ function onData(platformAccessory: BigAssFans_i6PlatformAccessory, data: Buffer)
 
   // parse each chunk and issue any interesting updates to homekit.
   for (let i = 0; i < numChunks; i++) {
-    processFanMessage(platformAccessory, unstuff(platformAccessory, chunks[i]));
+    processFanMessage(platformAccessory, unstuff(chunks[i]));
   }
 }
 
@@ -525,14 +494,14 @@ function processFanMessage(platformAccessory: BigAssFans_i6PlatformAccessory, da
   // new strategy - will digest the header here
   if (data[0] !== 0xc0) {
     log.warn('expected start of message chunk (0x0c), got: ' + hexFormat(data[0]));
-    megaDebug(platformAccessory, 3, 'rawChunk: ' + hexFormat(rawChunk));
+    debugLog('network', 3, 'rawChunk: ' + hexFormat(rawChunk));
     return;
   }
   data = data.subarray(1); // remove 0xc0
 
   if (data[0] !== 0x12) {
     log.warn('expected start of message header (0x12), got: ' + hexFormat(data[0]));
-    megaDebug(platformAccessory, 3, 'rawChunk: ' + hexFormat(rawChunk));
+    debugLog('network', 3, 'rawChunk: ' + hexFormat(rawChunk));
     return;
   }
   data = data.subarray(1); // remove 0x12
@@ -547,12 +516,12 @@ function processFanMessage(platformAccessory: BigAssFans_i6PlatformAccessory, da
 
   if (data.length !== (remainingChunkSize + 1)) { // add in the 0xc0
     log.warn('this is not the chunk size we\'re looking for: ' + remainingChunkSize + ', actual: ' + data.length);
-    megaDebug(platformAccessory, 3, 'rawChunk: ' + hexFormat(rawChunk));
+    debugLog('network', 3, 'rawChunk: ' + hexFormat(rawChunk));
     return;
   }
   if (data.length === 0 || data[0] !== 0x22) {
     log.warn('not good.  apparently we ran off the end of the data buffer');
-    megaDebug(platformAccessory, 3, 'rawChunk: ' + hexFormat(rawChunk));
+    debugLog('network', 3, 'rawChunk: ' + hexFormat(rawChunk));
     return;
   }
   data = data.subarray(1); // remove the field separator (0x22)
@@ -565,16 +534,15 @@ function processFanMessage(platformAccessory: BigAssFans_i6PlatformAccessory, da
   }
   const chunkSizeSansToken = bigAssNumber(Buffer.from(banArray));
 
-  if (data.length !== (chunkSizeSansToken + 73)) { // 73 - token lengh + 1 (0xc0)
+  if (data.length !== (chunkSizeSansToken + 73)) { // 73 - token length + 1 (0xc0)
     log.warn('chunkSizeSansToken: ' + chunkSizeSansToken + 73 + ', not what we expected with data length: ' + data.length);
-    megaDebug(platformAccessory, 3, 'rawChunk: ' + hexFormat(rawChunk));
+    debugLog('network', 3, 'rawChunk: ' + hexFormat(rawChunk));
     return;
   }
 
   if (data[0] !== 0x12) { // then it must be 0x1a.
     // let's see what happens if we just pass it on
   }
-
 
   /**
   * pick out the property code and send it to the decode function to get the value from its
@@ -585,12 +553,12 @@ function processFanMessage(platformAccessory: BigAssFans_i6PlatformAccessory, da
       if (data.length === 73) {
         return;
       } else {
-        megaDebug(platformAccessory, 2, 'surprise! token length was: ' + data.length);
+        debugLog('network', 2, 'surprise! token length was: ' + data.length);
       }
     }
     if (data[0] !== 0x12 && data[0] !== 0x1a) {
       platformAccessory.platform.log.warn('expected 0x12|0x1a, got: ', hexFormat(data.subarray(0, 1)));
-      megaDebug(platformAccessory, 2, 'unexpected byte in chunk:  ' + hexFormat(data) + ' from: ' + hexFormat(rawChunk));
+      debugLog('network', 2, 'unexpected byte in chunk:  ' + hexFormat(data) + ' from: ' + hexFormat(rawChunk));
       return;
     }
     data = data.subarray(1);  // remove the 'start of header' (0x12) from the remaining data
@@ -630,7 +598,7 @@ function processFanMessage(platformAccessory: BigAssFans_i6PlatformAccessory, da
     //  hexFormat(propertyValue) + ", log): " + parsedValue);
 
     // some unknown codes are under surveillance - is this one of them?
-    codeWatch(platformAccessory, propertyCodeString, parsedValue/*, propertyValueField*/);
+    codeWatch(propertyCodeString, parsedValue, propertyValueField);
 
     const propertyHandlerFunction = platformAccessory.propertiesTable[propertyCodeString][PROPERTYHANDLERFUNCTION];
     if (propertyHandlerFunction === undefined) {
@@ -759,18 +727,10 @@ function getPropertiesArray():typeof properties {
 function lightColorTemperature(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
   const mireds = Math.round(1000000 / pA.lightStates.ColorTemperature);
   pA.lightStates.ColorTemperature = Number(value);
-  megaDebug(pA, 2, 'update ColorTemperature:' + mireds);
+  debugLog('characteristics', 2, 'update ColorTemperature:' + mireds);
   pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.ColorTemperature, mireds);
 }
 
-// function lightBrightness(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
-//   const log = pA.platform.log;
-//   if (value !== 0) { // don't tell homebridge brightness is zero, it only confuses it.  It'll find out it's off in soon enough.
-//     pA.lightStates.Brightness = (value as number);
-//     log.debug('update Brightness:', pA.lightStates.Brightness);
-//     pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.Brightness, pA.lightStates.Brightness);
-//   }
-// }
 function lightBrightness(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
   if (value !== 0) { // don't tell homebridge brightness is zero, it only confuses it.  It'll find out it's off in soon enough.
     /* if (pA.lightStates.homeShieldUp && value != 1) {
@@ -778,7 +738,7 @@ function lightBrightness(value: number|string, pA:BigAssFans_i6PlatformAccessory
     } else */{
       pA.lightStates.homeShieldUp = false;
       pA.lightStates.Brightness = (value as number);
-      megaDebug(pA, 2, 'update Brightness:' + pA.lightStates.Brightness);
+      debugLog('characteristics', 2, 'update Brightness:' + pA.lightStates.Brightness);
       pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.Brightness, pA.lightStates.Brightness);
     }
   }
@@ -787,7 +747,7 @@ function lightBrightness(value: number|string, pA:BigAssFans_i6PlatformAccessory
 function lightOnState(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
   const onValue = (value === 0 ? false : true);
   pA.lightStates.On = onValue;
-  megaDebug(pA, 2, 'update Light On:' + pA.lightStates.On);
+  debugLog('characteristics', 2, 'update Light On:' + pA.lightStates.On);
   pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
 }
 
@@ -797,7 +757,7 @@ function fanOnState(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
   }
   const onValue = (value === 0 ? false : true);
   pA.fanStates.On = onValue;
-  megaDebug(pA, 2, 'update FanOn:' + pA.fanStates.On);
+  debugLog('characteristics', 2, 'update FanOn:' + pA.fanStates.On);
   pA.fanService.updateCharacteristic(pA.platform.Characteristic.On, pA.fanStates.On);
 }
 
@@ -806,7 +766,7 @@ function fanRotationDirection(value: number|string, pA:BigAssFans_i6PlatformAcce
   //  reverse switch off (0) == rotation direction counterclockwise (1)
   const rotationDirection = value === 0 ? 1 : 0;
   pA.fanStates.RotationDirection = rotationDirection;
-  megaDebug(pA, 2, 'update RotationDirection:' + pA.fanStates.RotationDirection);
+  debugLog('characteristics', 2, 'update RotationDirection:' + pA.fanStates.RotationDirection);
   pA.fanService.updateCharacteristic(pA.platform.Characteristic.RotationDirection, pA.fanStates.RotationDirection);
 }
 
@@ -814,17 +774,17 @@ function fanRotationSpeed(value: number|string, pA:BigAssFans_i6PlatformAccessor
   if (value !== 0) { // don't tell homebridge speed is zero, it only confuses it.  It'll find out it's off in due course.
     pA.fanStates.homeShieldUp = false;
     pA.fanStates.RotationSpeed = (value as number);
-    megaDebug(pA, 2, 'set speed to ' + pA.fanStates.RotationSpeed);
+    debugLog('characteristics', 2, 'set speed to ' + pA.fanStates.RotationSpeed);
     // convert to percentage for homekit
     const speedPercent = Math.round((pA.fanStates.RotationSpeed / MAXFANSPEED) * 100);
-    megaDebug(pA, 2, 'update RotationSpeed: ' + speedPercent + '%');
+    debugLog('characteristics', 2, 'update RotationSpeed: ' + speedPercent + '%');
     pA.fanService.updateCharacteristic(pA.platform.Characteristic.RotationSpeed, speedPercent);
   }
 }
 
 function currentTemperature(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
   pA.CurrentTemperature = Number(value);
-  megaDebug(pA, 2, 'update CurrentTemperature:' + pA.CurrentTemperature);
+  debugLog('characteristics', 2, 'update CurrentTemperature:' + pA.CurrentTemperature);
   pA.temperatureSensorService.updateCharacteristic(pA.platform.Characteristic.CurrentTemperature, pA.CurrentTemperature);
 }
 
@@ -835,7 +795,7 @@ function currentRelativeHumidity(value: number|string, pA:BigAssFans_i6PlatformA
   }
 
   pA.CurrentRelativeHumidity = Number(value);
-  megaDebug(pA, 2, 'update CurrentRelativeHumidity:' + pA.CurrentRelativeHumidity);
+  debugLog('characteristics', 2, 'update CurrentRelativeHumidity:' + pA.CurrentRelativeHumidity);
   pA.humiditySensorService.updateCharacteristic(pA.platform.Characteristic.CurrentRelativeHumidity, pA.CurrentRelativeHumidity);
 }
 
@@ -843,7 +803,7 @@ function whooshOnState(value: number|string, pA:BigAssFans_i6PlatformAccessory) 
   if (pA.showWhooshSwitch) {
     const onValue = (value === 0 ? false : true);
     pA.whooshSwitchOn = onValue;
-    megaDebug(pA, 2, 'update Whoosh:' + pA.whooshSwitchOn);
+    debugLog('characteristics', 2, 'update Whoosh:' + pA.whooshSwitchOn);
     pA.whooshSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.whooshSwitchOn);
   }
 }
@@ -852,7 +812,7 @@ function dimToWarmOnState(value: number|string, pA:BigAssFans_i6PlatformAccessor
   if (pA.showDimToWarmSwitch) {
     const onValue = (value === 0 ? false : true);
     pA.dimToWarmSwitchOn = onValue;
-    megaDebug(pA, 2, 'update Dim to Warm:' + pA.dimToWarmSwitchOn);
+    debugLog('characteristics', 2, 'update Dim to Warm:' + pA.dimToWarmSwitchOn);
     pA.dimToWarmSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.dimToWarmSwitchOn);
   }
 }
@@ -868,11 +828,11 @@ function mysteryCode(value: string, pA:BigAssFans_i6PlatformAccessory, code: str
 
   if (p !== undefined) {
     if (p !== v) {
-      megaDebug(pA, 3, 'mystery property value: ' + code + ' changed from: ' + p + ', to: ' + v);
+      debugLog('cluing', 3, 'mystery property value: ' + code + ' changed from: ' + p + ', to: ' + v);
       pA.mysteryProperties[code] = v;
     }
   } else {
-    megaDebug(pA, 3, 'initial mystery property value: ' + code + ', : ' + v);
+    debugLog('cluing', 3, 'initial mystery property value: ' + code + ', : ' + v);
     pA.mysteryProperties[code] = v;
   }
 }
@@ -980,10 +940,10 @@ function dataValue(bytes:Buffer): number|string {
 }
 
 // a little hack for codes under investigation
-function codeWatch(pA:BigAssFans_i6PlatformAccessory, s: string, v: string|number|Buffer/*, m: any*/) {
-  /* if (s === '0x18, 0xc0') {
-    log.debug('code watch - s: ' + s + ', m: ' + hexFormat(m));
-  } else */ if (s === '0xf8, 0x03') {  //  RPMs
+function codeWatch(s: string, v: string|number|Buffer, m: Buffer) {
+  if (s === '0x18, 0xc0') {
+    debugLog('cluing', 4, 'code watch - s: ' + s + ', m: ' + hexFormat(m));
+  } else if (s === '0xf8, 0x03') {  //  looks like it's probably RPMs
     switch (v) {
       case 0:
       case 22:
@@ -995,18 +955,18 @@ function codeWatch(pA:BigAssFans_i6PlatformAccessory, s: string, v: string|numbe
       case 145:
         break;
       default:
-        megaDebug(pA, 1, 'code watch - s: ' + s + ', v: ' + hexFormat(v));
+        debugLog('cluing', 1, 'code watch - s: ' + s + ', v: ' + hexFormat(v));
     }
   }
-  // if (s === '0xda, 0x0a') {
-  //   megaDebug(pA, 3, 'code watch - s: ' + s + ', v: ' + hexFormat(v));
-  // }
+  if (s === '0xda, 0x0a') {
+    debugLog('cluing', 4, 'code watch - s: ' + s + ', v: ' + hexFormat(v));
+  }
 }
 
-function unstuff(platformAccessory: BigAssFans_i6PlatformAccessory, data:typeof Buffer):typeof Buffer {
+function unstuff(data:typeof Buffer):typeof Buffer {
   const unstuffedData: number[] = [];
   if (data[0] !== START) {
-    megaDebug(platformAccessory, 1, 'data doesn\'t begin with START byte - all bets are off');
+    debugLog('network', 1, 'data doesn\'t begin with START byte - all bets are off');
   } else {
     let dataIndex = 0;
     let unstuffedDataIndex = 0;
@@ -1084,16 +1044,16 @@ function hexFormat(arg) {
   return arg.toString('hex').replace(/../g, '0x$&, ').trim().slice(0, -1);
 }
 
-// lvl 1 - constructor completed
-// lvl 2 - characteristic stuff, error debugging and data exceptions
-// lvl 3 - mystery values  + unknown chunks
-// lvl 4 - chunk type matching
-// lvl 7 - data sent to fan
-// lvl 8 - byte count received from fan
-// lvl 9 - show unmatched data chunks
-// lvl 11 - data received from fan
-function megaDebug (platformAccessory: BigAssFans_i6PlatformAccessory, level: number, message: string) {
-  if (platformAccessory.debugLevel >= level) {
-    platformAccessory.platform.log.debug(message);
+function debugLog(logTag:string, logLevel:number, logMessage:string) {
+  if (debugLevels[logTag] === undefined) {
+    hbLog.warn('no such logging tag: "' + logTag + '", the message is: "' + logMessage + '"');
   }
+  if (debugLevels[logTag] >= logLevel) {
+    hbLog.debug(logMessage);
+  }
+}
+
+function clientWrite(client, b) {
+  debugLog('network', 7, 'sending ' + b.toString('hex'));
+  client.write(b);
 }
