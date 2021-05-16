@@ -45,12 +45,6 @@
               "description": "Add a switch for 'Dim to Warm'",
               "type": "boolean",
               "default": false
-            },
-            "megaDebugLevel": {
-              "title": "Enable extra debug messages",
-              "description": "Enables, and sets, level of more detailed debugging messages. 0 means no extra debug messages.  MAX is shorthand for the highest level - which can be more than 11",
-              "type": "string",
-              "default": "0"
             }
           }
         }  
