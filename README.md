@@ -1,6 +1,7 @@
 <span align="center">
+<h1 align="center"><img src="https://raw.githubusercontent.com/oogje/homebridge-i6-bigAssFans/main/IMG_3799.jpg"/></h1>
 
-# homebridge-i6-bigassfans
+## homebridge-i6-bigassfans
 
 <!-- [![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins) -->
 <!-- [![homebridge-miot](https://badgen.net/npm/v/homebridge-bigassfans-i6?icon=npm)](https://www.npmjs.com/package/homebridge-bigassfans-i6)
@@ -18,11 +19,13 @@ most part guessing the format of the binary messages that were sent to and from 
 message types I've seen, I think I know what about half of them probably mean.
 
 ### Bugs
+
 The network connection to the fan will reset on occassion.  I try to handle that gracefully but if it happens when you
 issue a command (e.g., turn on the light) as oppposed to the periodic probe message, the command will be ignored.  Try again after two seconds.
 
 
 ### Features
+
 * Turn fan and/or light on or off!
 * Change speed, and direction (keep in mind Big Ass Fans frowns on reversing speed.)
 * Change brightness level of LED lamp.
@@ -35,6 +38,7 @@ issue a command (e.g., turn on the light) as oppposed to the periodic probe mess
 If you are not already running homebridge you'll find how to install it in the homebridge [documentation](https://github.com/homebridge/homebridge#readme).  After you install homebridge you can install and configure the `homebridge-i6-bigassfans` plugin through `homebridge-config-ui-x` using a command line and editor as described below.
 
 #### Install homebridge-i6-bigassfans:
+
 ```sh
 sudo npm install -g homebridge-i6-bigassfans@beta
 ```
@@ -66,39 +70,46 @@ Example configuration:
 
 
 #### Platform configuration fields
-- `platform` [required]
+
+* `platform` [required]
 Should always be **"BigAssFans-i6"**.
-- `fans` [required]
+* `fans` [required]
 A list of your fans.
+
 #### General configuration fields
-- `name` [required]
+
+* `name` [required]
 Name of your fan.
-- `ip` [required]
+* `ip` [required]
 IP address of your fan.  Can be found in the Big Ass Fans app's Wi-Fi settings screen.
-- `mac` [required]
+* `mac` [required]
 MAC address of your fan.  Can be found in the Big Ass Fans app's Wi-Fi settings screen.
-- `megaDebugLevel` [optional]
+* `megaDebugLevel` [optional]
 Determines volume of debug messages. (a number or "MAX")
-- `whoosh` [optional]
+* `whoosh` [optional]
 Adds accessory switch for Whoosh Mode (true/false)
-- `dimToWarm` [optional]
+* `dimToWarm` [optional]
 Adds accessory switch for Dim to Warm (true/false)
 
 ### Troubleshooting
+
 If you have any issues with the plugin or fan services then you can run Homebridge in debug mode, which will provide some additional information. This might be useful for debugging issues.
 
 Homebridge debug mode:
+
 ```sh
 homebridge -D
 ```
 
-For the mega debug log, add the following to your config.json or using `homebridge-config-ui-x` :
+For the mega debug log, add the following to your config.json or using `homebridge-config-ui-x`:
+
 ```json
 "megaDebugLevel": <specify a number or the word MAX>
 ```
 This will enable extra logging which might be helpful to debug all kind of issues.
 
 ## Special thanks
+
 [homebridge-miot](https://github.com/merdok/homebridge-miot) - whose style served as a guide.
 
 [homebridge-bigAssFans](https://github.com/sean9keenan/homebridge-bigAssFans) - where the Haiku message protocol gave me some insight.
