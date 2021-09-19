@@ -45,6 +45,12 @@
               "description": "Add a switch for 'Dim to Warm'",
               "type": "boolean",
               "default": false
+            },
+            "fanAuto": {
+              "title": "Fan Auto Switch",
+              "description": "Add a switch for 'Fan Auto'",
+              "type": "boolean",
+              "default": false
             }
           }
         }  

@@ -13,14 +13,13 @@
 
 `homebridge-i6-bigassfans` is a plugin for Homebridge which allows you to control a Big Ass Fans model i6.
 
-This work in progress is my first plugin and first project using javascript, let alone Node.js or typescript.  This works 
-with my LED equipped i6 fan.  I'm hoping it works for you.  I created the plugin by observing network traffic and for the 
+This works with my LED equipped i6 fan.  I'm hoping it works for you.  I created the plugin by observing network traffic and for the 
 most part guessing the format of the binary messages that were sent to and from the fan.  Of the appoximately 80 unique 
 message types I've seen, I think I know what about half of them probably mean.
 
 ### Bugs
 
-The network connection to the fan will reset on occassion.  I try to handle that gracefully but if it happens when you
+The network connection to the fan will reset on occassion.  I try to handle that gracefully but if it happens just as you
 issue a command (e.g., turn on the light) as oppposed to the periodic probe message, the command will be ignored.  Try again after two seconds.
 
 
@@ -32,6 +31,7 @@ issue a command (e.g., turn on the light) as oppposed to the periodic probe mess
 * See the fan's bluetooth remote's temperature and humidity sensors.
 * Turn Whoosh Mode on or off.
 * Turn Dim to Warm on or off.
+* Trun fan's Auto mode on or off.
 
 ### Installation
 
@@ -84,29 +84,24 @@ Name of your fan.
 IP address of your fan.  Can be found in the Big Ass Fans app's Wi-Fi settings screen.
 * `mac` [required]
 MAC address of your fan.  Can be found in the Big Ass Fans app's Wi-Fi settings screen.
-* `megaDebugLevel` [optional]
-Determines volume of debug messages. (a number or "MAX")
 * `whoosh` [optional]
 Adds accessory switch for Whoosh Mode (true/false)
 * `dimToWarm` [optional]
 Adds accessory switch for Dim to Warm (true/false)
+* `fanAuto` [optional]
+Adds accessory switch for the fan's Auto mode (true/false)
 
 ### Troubleshooting
 
-If you have any issues with the plugin or fan services then you can run Homebridge in debug mode, which will provide some additional information. This might be useful for debugging issues.
+First, make sure you can control your fan from the official Big Ass Fans app.
+
+If you have any issues with the plugin, you can run Homebridge in debug mode, which will provide some additional information. This may be useful for investigating issues.
 
 Homebridge debug mode:
 
 ```sh
 homebridge -D
 ```
-
-For the mega debug log, add the following to your config.json or using `homebridge-config-ui-x`:
-
-```json
-"megaDebugLevel": <specify a number or the word MAX>
-```
-This will enable extra logging which might be helpful to debug all kind of issues.
 
 ## Special thanks
 
@@ -116,4 +111,4 @@ This will enable extra logging which might be helpful to debug all kind of issue
 
 [HAP-NodeJS](https://github.com/KhaosT/HAP-NodeJS) & [homebridge](https://github.com/nfarina/homebridge) - for making this possible.
 
-[Big Ass Fans](https://www.bigassfans.com) - who I hope is hard at work on their Homekit implementation.
+[Big Ass Fans](https://www.bigassfans.com) - who I hope is working on their Homekit implementation.
