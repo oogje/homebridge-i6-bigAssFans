@@ -31,7 +31,7 @@ issue a command (e.g., turn on the light) as oppposed to the periodic probe mess
 * See the fan's bluetooth remote's temperature and humidity sensors.
 * Turn Whoosh Mode on or off.
 * Turn Dim to Warm on or off.
-* Trun fan's Auto mode on or off.
+* Turn fan's Auto mode on or off.
 
 ### Installation
 
