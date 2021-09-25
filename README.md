@@ -3,7 +3,7 @@
 
 ## homebridge-i6-bigassfans
 
-<!-- [![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins) -->
+[![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
 <!-- [![homebridge-miot](https://badgen.net/npm/v/homebridge-bigassfans-i6?icon=npm)](https://www.npmjs.com/package/homebridge-bigassfans-i6)
 [![mit-license](https://badgen.net/npm/license/lodash)](https://github.com/oogje/homebridge-bigassfans-i6/blob/master/LICENSE)
 <!-- [![follow-me-on-twitter](https://badgen.net/twitter/follow/merdok_dev?icon=twitter)](https://twitter.com/merdok_dev) -->
@@ -31,7 +31,7 @@ issue a command (e.g., turn on the light) as oppposed to the periodic probe mess
 * See the fan's bluetooth remote's temperature and humidity sensors.
 * Turn Whoosh Mode on or off.
 * Turn Dim to Warm on or off.
-* Trun fan's Auto mode on or off.
+* Turn fan's Auto mode on or off.
 
 ### Installation
 
