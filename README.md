@@ -40,7 +40,7 @@ If you are not already running homebridge you'll find how to install it in the h
 #### Install homebridge-i6-bigassfans:
 
 ```sh
-sudo npm install -g homebridge-i6-bigassfans@beta
+sudo npm install -g homebridge-i6-bigassfans
 ```
 
 #### Configuration
