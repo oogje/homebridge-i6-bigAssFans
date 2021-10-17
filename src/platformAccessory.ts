@@ -16,7 +16,7 @@ debugLevels['newcode'] = 0;
 
 const MAXFANSPEED = 7;
 
-const MAXEBUGLEVEL = 99;
+const MAXDEBUGLEVEL = 99;
 
 // property table columns
 const DECODEVALUEFUNCTION = 0;
@@ -96,8 +96,8 @@ export class BigAssFans_i6PlatformAccessory {
     if (accessory.context.device.megaDebugLevel !== undefined) {
       hbLog.warn('"megaDebugLevel" in configuration is deprecated.');
       if (accessory.context.device.megaDebugLevel.toLowerCase() === 'max' ||
-      (accessory.context.device.megaDebugLevel as number) > MAXEBUGLEVEL) {
-        this.debugLevel = MAXEBUGLEVEL;
+      (accessory.context.device.megaDebugLevel as number) > MAXDEBUGLEVEL) {
+        this.debugLevel = MAXDEBUGLEVEL;
       } else {
         this.debugLevel = this.accessory.context.device.megaDebugLevel as number;
       }
@@ -350,7 +350,8 @@ export class BigAssFans_i6PlatformAccessory {
       debugLog('characteristics', 2, 'Set Characteristic RotationSpeed -> ' + (value as number) + '%');
       this.fanStates.RotationSpeed = Math.round(((value as number) / 100) * MAXFANSPEED);
       if (this.fanStates.RotationSpeed > MAXFANSPEED) {
-        this.platform.log.warn('ignoring fan speed > ' + MAXFANSPEED + ': ' + this.fanStates.RotationSpeed);
+        this.platform.log.warn('fan speed > ' + MAXFANSPEED + ': ' + this.fanStates.RotationSpeed + ', setting to ' + MAXFANSPEED);
+        this.fanStates.RotationSpeed = MAXFANSPEED;
       }
       b = Buffer.from(ONEBYTEHEADER.concat([0xf0, 0x02, this.fanStates.RotationSpeed, 0xc0]));
     }
@@ -509,7 +510,7 @@ function networkSetup(platformAccessory: BigAssFans_i6PlatformAccessory) {
 
 function onData(platformAccessory: BigAssFans_i6PlatformAccessory, data: Buffer) {
   debugLog('network', 11, 'raw data: ' + hexFormat(data));
-  debugLog('network', 8, 'accessory client got: ' + data.length + ' bytes');
+  debugLog('network', 8, 'accessory client got: ' + data.length + (data.length === 1 ? ' byte' : ' bytes'));
 
   // break data into individual chunks bracketed by 0xc0
   let startIndex = -1;
@@ -854,13 +855,17 @@ function fanRotationSpeed(value: number|string, pA:BigAssFans_i6PlatformAccessor
     debugLog('characteristics', 2, 'update RotationSpeed: ' + speedPercent + '%');
     pA.fanService.updateCharacteristic(pA.platform.Characteristic.RotationSpeed, speedPercent);
 
-    pA.fanStates.On = true;
-    debugLog(['newcode', 'characteristics'], [1, 2], 'update FanOn: ' + pA.fanStates.On + ' because (auto && speed > 0)');
-    pA.fanService.updateCharacteristic(pA.platform.Characteristic.On, pA.fanStates.On);
+    if (!pA.fanStates.On) {
+      pA.fanStates.On = true;
+      debugLog(['newcode', 'characteristics'], [1, 2], 'update FanOn: ' + pA.fanStates.On + ' because (auto && speed > 0)');
+      pA.fanService.updateCharacteristic(pA.platform.Characteristic.On, pA.fanStates.On);
+    }
   } else {
-    pA.fanStates.On = false;
-    debugLog(['newcode', 'characteristics'], [1, 2], 'update FanOn: ' + pA.fanStates.On + ' because (auto && speed == 0)');
-    pA.fanService.updateCharacteristic(pA.platform.Characteristic.On, pA.fanStates.On);
+    if (pA.fanStates.On) {
+      pA.fanStates.On = false;
+      debugLog(['newcode', 'characteristics'], [1, 2], 'update FanOn: ' + pA.fanStates.On + ' because (auto && speed == 0)');
+      pA.fanService.updateCharacteristic(pA.platform.Characteristic.On, pA.fanStates.On);
+    }
   }
 }
 
