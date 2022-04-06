@@ -2,8 +2,8 @@
   "private": false,
   "displayName": "Big Ass Fans i6",
   "name": "homebridge-i6-bigassfans",
-  "version": "0.2.2",
-  "description": "Homebridge plugin for Big Ass Fans model i6.",
+  "version": "0.3.2beta",
+  "description": "Homebridge plugin for Big Ass Fans.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -28,7 +28,8 @@
     "big-ass-fans",
     "ceiling-fan",
     "fan",
-    "i6"
+    "i6",
+    "haiku"
   ],
   "devDependencies": {
     "@types/node": "^14.14.31",
