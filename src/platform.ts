@@ -81,7 +81,7 @@ export class BigAssFans_i6Platform implements DynamicPlatformPlugin {
           throw new Error('"mac" is required but not defined for ${fan.name}!');
         }
       } catch (error) {
-        platform.log.error(error);
+        platform.log.error((error as Error).message);
         platform.log.error('Failed to create platform device, missing mandatory information!');
         platform.log.error('Please check your device config!');
         return;
