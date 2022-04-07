@@ -81,7 +81,7 @@ export class BigAssFans_i6PlatformAccessory {
 
   constructor(
     public readonly platform: BigAssFans_i6Platform,
-    private readonly accessory: PlatformAccessory,
+    public readonly accessory: PlatformAccessory,
   ) {
     hbLog = platform.log;
     this.IP = accessory.context.device.ip;
@@ -702,7 +702,7 @@ function getPropertiesArray():typeof properties {
   // many of the same codes occur in multiple chunks  (or in the same chunk?)
   properties['0x08, 0x03'] = [dataValue,      mysteryCode],             //  something to do with schedules
   properties['0x0a'] =       [text3Value,     noop];                    //  name
-  properties['0x12, 0x02'] = [text3Value,     noop];                    //  model
+  properties['0x12'] =       [textValue,      getModel];                //  model
   properties['0x18, 0xc0'] = [dataValue,      mysteryCode];             //  mystery
   properties['0x22'] =       [text3Value,     noop];                    //  local datetime
   properties['0x2a'] =       [text3Value,     noop];                    //  zulu datetime
@@ -808,6 +808,18 @@ function getPropertiesArray():typeof properties {
 /**
 * property handler functions
 */
+function getModel(value: string, pA:BigAssFans_i6PlatformAccessory) {
+  pA.Model = value;
+  debugLog(pA, 'newcode', 1, 'model: ' + pA.Model);
+  if (value === 'Haiku  H/I  Series') {
+    const service = pA.accessory.getService(pA.platform.Service.HumiditySensor);
+    if (service) {
+      pA.accessory.removeService(service);
+      debugLog(pA, 'newcode', 1, 'no HumiditySensor for you!');
+    }
+  }
+}
+
 function lightColorTemperature(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
   const mireds = Math.round(1000000 / pA.lightStates.ColorTemperature);
   pA.lightStates.ColorTemperature = Number(value);
@@ -1047,6 +1059,7 @@ function text7Value(bytes:Buffer): number|string {
   // 9B:F0:6A:37:8D:DD
   return(bytes.subarray(3, 8).toString() + ' ' + bytes.subarray(12, 15).toString() + ' ' + bytes.subarray(17).toString());
 }
+
 function weatherValue(bytes:Buffer): number|string {
   return(bigAssNumber(bytes) / 100);
 }
