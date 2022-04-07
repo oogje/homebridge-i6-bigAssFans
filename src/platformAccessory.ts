@@ -7,12 +7,6 @@ import { BigAssFans_i6Platform } from './platform';
 declare const Buffer; // this seems to ward off typescripts whining about buffer methods such as length, etc.
 
 let hbLog: Logger;
-// const debugLevels:number[] = [];
-// debugLevels['cluing'] = 3;
-// debugLevels['network'] = 0;
-// debugLevels['progress'] = 0;
-// debugLevels['characteristics'] = 0;
-// debugLevels['newcode'] = 0;
 
 const MAXFANSPEED = 7;
 
@@ -86,6 +80,7 @@ export class BigAssFans_i6PlatformAccessory {
     hbLog = platform.log;
     this.IP = accessory.context.device.ip;
     this.MAC = accessory.context.device.mac;
+    this.Name = accessory.context.device.name;
 
     for (const hdr in this.propertiesTable) {
       const a = hdr.split(',');
@@ -95,10 +90,11 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     // defaults and enumeration of debugging keys
-    this.debugLevels['network'] = 0;
-    this.debugLevels['progress'] = 0;
     this.debugLevels['cluing'] = 0;
     this.debugLevels['newcode'] = 0;
+    this.debugLevels['network'] = 0;
+    this.debugLevels['humidity'] = 0;
+    this.debugLevels['progress'] = 0;
     this.debugLevels['characteristics'] = 0;
 
     // deprecating megaDebugLevel - but will interpret it for the time being
@@ -524,7 +520,7 @@ function networkSetup(platformAccessory: BigAssFans_i6PlatformAccessory) {
 }
 
 function onData(platformAccessory: BigAssFans_i6PlatformAccessory, data: Buffer) {
-  debugLog(platformAccessory, 'network', 11, 'raw data: ' + hexFormat(data));
+  debugLog(platformAccessory, 'network', 11, 'raw (stuffed) data: ' + hexFormat(data));
   debugLog(platformAccessory, 'network', 8, 'accessory client got: ' + data.length + (data.length === 1 ? ' byte' : ' bytes'));
 
   // break data into individual chunks bracketed by 0xc0
@@ -648,17 +644,6 @@ function processFanMessage(platformAccessory: BigAssFans_i6PlatformAccessory, da
     data = data.subarray(len);  // remove the message from the remaining data
 
     let hdrsize = 2; // most property headers are two bytes
-    // // but there are a few single-byte headers
-    // if (propertyFields[0] === 0x0a ||
-    //     propertyFields[0] === 0x22 ||
-    //     propertyFields[0] === 0x2a ||
-    //     propertyFields[0] === 0x32 ||
-    //     propertyFields[0] === 0x3a ||
-    //     propertyFields[0] === 0x42 ||
-    //     propertyFields[0] === 0x70 ||
-    //     propertyFields[0] === 0x78) {
-    //   hdrsize = 1;
-    // }
     if (platformAccessory.oneByteHeaders.includes(propertyFields[0])) {
       hdrsize = 1;
     }
@@ -736,7 +721,7 @@ function getPropertiesArray():typeof properties {
   properties['0xb0, 0x09'] = [boolValue,      noop];                    //  prevent additional controls
   properties['0xb8, 0x03'] = [varIntValue,    noop];                    //  fan return to auto after
   properties['0xb8, 0x04'] = [varIntValue,    lightColorTemperature];   //  color temperature
-  properties['0xb8, 0x05'] = [weatherValue,   currentRelativeHumidity]; //  humidity
+  properties['0xb8, 0x05'] = [humidityValue,   currentRelativeHumidity]; //  humidity
   properties['0xb8, 0x08'] = [boolValue,      noop];                    //  beeper
   properties['0xb8, 0x09'] = [intValue,       mysteryCode];             //  mystery
   properties['0xc0, 0x01'] = [intValue,       mysteryCode];             //  mystery
@@ -811,7 +796,9 @@ function getPropertiesArray():typeof properties {
 function getModel(value: string, pA:BigAssFans_i6PlatformAccessory) {
   pA.Model = value;
   debugLog(pA, 'newcode', 1, 'model: ' + pA.Model);
-  if (value === 'Haiku  H/I  Series') {
+
+  // at one time we thought the Haiku didn't have a humidity sensor, but that may not be correct, so we'lll comment out this code for now
+  if (value === 'Haiku H/I Series') {
     const service = pA.accessory.getService(pA.platform.Service.HumiditySensor);
     if (service) {
       pA.accessory.removeService(service);
@@ -917,6 +904,9 @@ function currentTemperature(value: number|string, pA:BigAssFans_i6PlatformAccess
 }
 
 function currentRelativeHumidity(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
+  // debugLog(pA, 'humidity', 1, pA.Name + ' - CurrentRelativeHumidity:' + value);
+  hbLog.debug(pA.Name + ' - CurrentRelativeHumidity:' + value);
+
   if (value < 0 || value > 100) {
     pA.platform.log.info('current relative humidity out of range: ' + value + ', ignored');
     return;
@@ -1060,6 +1050,11 @@ function text7Value(bytes:Buffer): number|string {
   return(bytes.subarray(3, 8).toString() + ' ' + bytes.subarray(12, 15).toString() + ' ' + bytes.subarray(17).toString());
 }
 
+function humidityValue(bytes:Buffer): number|string {
+  hbLog.debug("humidity codes: "  + hexFormat(bytes));
+  return(bigAssNumber(bytes) / 100);
+}
+
 function weatherValue(bytes:Buffer): number|string {
   return(bigAssNumber(bytes) / 100);
 }
@@ -1085,6 +1080,9 @@ const ESC = 0xDB;
 const START = 0xc0;
 const ESC_STUFF = 0xDD;
 const START_STUFF = 0xDC;
+
+// 0xdb, 0xdc -> 0xc0
+// 0xdb, 0xdd -> 0xdb
 
 function unstuff(data:typeof Buffer, pA:BigAssFans_i6PlatformAccessory):typeof Buffer {
   const unstuffedData: number[] = [];
