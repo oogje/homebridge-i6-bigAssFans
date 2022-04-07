@@ -1051,7 +1051,7 @@ function text7Value(bytes:Buffer): number|string {
 }
 
 function humidityValue(bytes:Buffer): number|string {
-  hbLog.debug("humidity codes: "  + hexFormat(bytes));
+  hbLog.debug('humidity codes: '  + hexFormat(bytes));
   return(bigAssNumber(bytes) / 100);
 }
 
