@@ -151,13 +151,14 @@ export class BigAssFans_i6Platform implements DynamicPlatformPlugin {
 }
 
 import net = require('net');
-let timeoutID: NodeJS.Timeout;
+// let timeoutID: NodeJS.Timeout;
+let timeoutIDs:NodeJS.Timeout[] = [];
 function checkDevice(platform: BigAssFans_i6Platform, ip: string, cb) {
   const client = net.connect(31415, ip, () => {
     const b = Buffer.from([0xc0, 0x12, 0x02, 0x1a, 0x00, 0xc0]);
     client.write(b);
 
-    timeoutID = setTimeout((log: Logger, ip: string, client) => {
+    timeoutIDs[ip] = setTimeout((log: Logger, ip: string, client) => {
       client.destroy();
       log.error('Fan configured with ip: ' + ip +
           ' is not responding to our probe.  This could happen if the fan model is not i6, but for instance Haiku.');
@@ -167,7 +168,7 @@ function checkDevice(platform: BigAssFans_i6Platform, ip: string, cb) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   client.on('error', (err:any) => {
-    clearTimeout(timeoutID);
+    clearTimeout(timeoutIDs[ip]);
     const log = platform.log;
     if (err.code === 'ETIMEDOUT') {
       log.error('Connection to fan configured with ip: ' + ip +
@@ -185,7 +186,7 @@ function checkDevice(platform: BigAssFans_i6Platform, ip: string, cb) {
   });
 
   client.on('data', (data: Buffer) => {
-    clearTimeout(timeoutID);
+    clearTimeout(timeoutIDs[ip]);
     client.destroy();
     if (data[0] === 0xc0 && data[1] === 0x12) {
       cb(client, data);

@@ -270,6 +270,9 @@ export class BigAssFans_i6PlatformAccessory {
     */
     networkSetup(this);
     debugLog(this, 'progress', 1, 'constructed');
+
+    debugLog(this, 'test1', 1, 'constructed');
+    debugLog(this, ['test2', 'test 3'], [1, 1], 'constructed');
   }
 
   /**
@@ -749,7 +752,7 @@ function getPropertiesArray():typeof properties {
   properties['0x82, 0x01'] = [text4Value,     noop];                    //  mystery firmware
   properties['0x88, 0x02'] = [intValue,       mysteryCode];             //  mystery
   properties['0x88, 0x03'] = [intValue,       mysteryCode];             //  mystery
-  properties['0x88, 0x04'] = [intValue,       mysteryCode];             //  mystery
+  properties['0x88, 0x04'] = [intValue,       mysteryCode];             //  eco mode (haiku)
   properties['0x8a, 0x01'] = [dataValue,      mysteryCode];             //  mystery (haiku)
   properties['0x90, 0x03'] = [intValue,       noop];                    //  comfort min speed
   properties['0x90, 0x05'] = [intValue,       mysteryCode];             //  mystery (haiku)
