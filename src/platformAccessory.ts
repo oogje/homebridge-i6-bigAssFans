@@ -26,6 +26,7 @@ export class BigAssFans_i6PlatformAccessory {
   public whooshSwitchService!: Service;
   public dimToWarmSwitchService!: Service;
   public fanAutoSwitchService!: Service;
+  public lightAutoSwitchService!: Service;
 
   public lightStates = {
     On: true,
@@ -48,12 +49,14 @@ export class BigAssFans_i6PlatformAccessory {
   public dimToWarmSwitchOn = false;
   public showFanAutoSwitch = false;
   public fanAutoSwitchOn = false;
+  public showLightAutoSwitch = false;
+  public lightAutoSwitchOn = false;
 
   public IP: string;
   public MAC: string;
   public Name = 'naamloos';
   public SSID = 'apname';
-  public Model = 'i6';
+  public Model = 'unknown model';
   public OldProtocolFlag:boolean|undefined = undefined;
 
   public debugLevel = 1;
@@ -130,6 +133,9 @@ export class BigAssFans_i6PlatformAccessory {
     }
     if (accessory.context.device.fanAuto) {
       this.showFanAutoSwitch = true; // defaults to false in property initialization
+    }
+    if (accessory.context.device.lightAuto) {
+      this.showLightAutoSwitch = true; // defaults to false in property initialization
     }
 
     /**
@@ -230,7 +236,7 @@ export class BigAssFans_i6PlatformAccessory {
     if (this.showFanAutoSwitch) {
       this.fanAutoSwitchService = this.accessory.getService('fanAutoSwitch') ||
         this.accessory.addService(this.platform.Service.Switch, 'fanAutoSwitch', 'switch-3');
-      accessoryName = capitalizeName ?  ' Auto' : ' auto';
+      accessoryName = capitalizeName ?  ' Fan Auto' : ' fan auto';
       this.fanAutoSwitchService.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name + accessoryName);
 
       this.fanAutoSwitchService.getCharacteristic(this.platform.Characteristic.On)
@@ -238,6 +244,21 @@ export class BigAssFans_i6PlatformAccessory {
         .onGet(this.getFanAutoSwitchOnState.bind(this));
     } else {
       const service = this.accessory.getService('fanAutoSwitch');
+      if (service) {
+        this.accessory.removeService(service);
+      }
+    }
+    if (this.showLightAutoSwitch) {
+      this.lightAutoSwitchService = this.accessory.getService('lightAutoSwitch') ||
+        this.accessory.addService(this.platform.Service.Switch, 'lightAutoSwitch', 'switch-4');
+      accessoryName = capitalizeName ?  ' Light Auto' : ' light auto';
+      this.lightAutoSwitchService.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name + accessoryName);
+
+      this.lightAutoSwitchService.getCharacteristic(this.platform.Characteristic.On)
+        .onSet(this.setLightAutoSwitchOnState.bind(this))
+        .onGet(this.getLightAutoSwitchOnState.bind(this));
+    } else {
+      const service = this.accessory.getService('lightAutoSwitch');
       if (service) {
         this.accessory.removeService(service);
       }
@@ -259,8 +280,12 @@ export class BigAssFans_i6PlatformAccessory {
   async setLightOnState(value: CharacteristicValue) {
     debugLog(this, 'characteristics',  2, 'Set Characteristic Light On -> ' + value);
     this.lightStates.On = value as boolean;
-    clientWrite(this.client,
-      Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, (this.lightStates.On ? 0x01 : 0x00), 0xc0])), this);
+
+    // ASS-U-ME-ing this applies just like the fan auto logic below which was created long before the light auto switch, when I cared more.
+    if (this.lightAutoSwitchOn && this.lightStates.On) {
+      return;
+    }
+    clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, (this.lightStates.On ? 0x01 : 0x00), 0xc0])), this);
   }
 
   async getLightOnState(): Promise<CharacteristicValue> {
@@ -327,7 +352,6 @@ export class BigAssFans_i6PlatformAccessory {
     if (this.fanAutoSwitchOn && this.fanStates.On) {
       return;
     }
-
     clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xd8, 0x02, (this.fanStates.On ? 0x01 : 0x00), 0xc0])), this);
   }
 
@@ -446,6 +470,25 @@ export class BigAssFans_i6PlatformAccessory {
     debugLog(this, ['newcode', 'characteristics'], [1, 4], 'Get Characteristic Fan Auto Switch On -> ' + isOn);
     return isOn;
   }
+
+  // set/get won't get called unless showLightAutoSwitch is true
+  async setLightAutoSwitchOnState(value: CharacteristicValue) {
+    debugLog(this, ['newcode', 'characteristics'], [1, 2], 'Set Characteristic Light Auto Switch On -> ' + value);
+    this.lightAutoSwitchOn = value as boolean;
+    if (this.lightAutoSwitchOn) {
+      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, 0x02, 0xc0])), this);
+    } else {
+      // in order for light to turn auto off, we need to tell it to be on or off
+      this.setLightOnState(this.fanStates.On);
+    }
+  }
+
+  async getLightAutoSwitchOnState(): Promise<CharacteristicValue> {
+    const isOn = this.lightAutoSwitchOn;
+    debugLog(this, ['newcode', 'characteristics'], [1, 4], 'Get Characteristic Light Auto Switch On -> ' + isOn);
+    return isOn;
+  }
+
 }
 
 import net = require('net');
@@ -660,14 +703,14 @@ function processFanMessage(platformAccessory: BigAssFans_i6PlatformAccessory, da
     if (decodeValueFunction === undefined) {
       platformAccessory.platform.log.warn('No value decoding function for: ', propertyCodeString);
     }
-    const parsedValue = decodeValueFunction(propertyValueField, platformAccessory, 'noop');
-    if (parsedValue === undefined) {
+    const decodedValue = decodeValueFunction(propertyValueField, platformAccessory, 'noop');
+    if (decodedValue === undefined) {
       platformAccessory.platform.log.warn('Could not decode value for: ', propertyCodeString);
       continue;
     }
 
     // some unknown codes might be under surveillance - check if this is one of them?
-    codeWatch(propertyCodeString, parsedValue, propertyValueField, platformAccessory);
+    codeWatch(propertyCodeString, decodedValue, propertyValueField, platformAccessory);
 
     const propertyHandlerFunction = platformAccessory.propertiesTable[propertyCodeString][PROPERTYHANDLERFUNCTION];
     if (propertyHandlerFunction === undefined) {
@@ -675,7 +718,7 @@ function processFanMessage(platformAccessory: BigAssFans_i6PlatformAccessory, da
       continue;
     }
 
-    propertyHandlerFunction(parsedValue, platformAccessory, propertyCodeString);
+    propertyHandlerFunction(decodedValue, platformAccessory, propertyCodeString);
   }
 }
 
@@ -706,13 +749,18 @@ function getPropertiesArray():typeof properties {
   properties['0x82, 0x01'] = [text4Value,     noop];                    //  mystery firmware
   properties['0x88, 0x02'] = [intValue,       mysteryCode];             //  mystery
   properties['0x88, 0x03'] = [intValue,       mysteryCode];             //  mystery
+  properties['0x88, 0x04'] = [intValue,       mysteryCode];             //  mystery
+  properties['0x8a, 0x01'] = [dataValue,      mysteryCode];             //  mystery (haiku)
   properties['0x90, 0x03'] = [intValue,       noop];                    //  comfort min speed
+  properties['0x90, 0x05'] = [intValue,       mysteryCode];             //  mystery (haiku)
+  properties['0x9a, 0x05'] = [dataValue,      mysteryCode];             //  mystery (haiku)
   properties['0x98, 0x03'] = [intValue,       noop];                    //  comfort max speed
   properties['0xa0, 0x03'] = [boolValue,      noop];                    //  fan motion sense
-  properties['0xa0, 0x04'] = [onOffAutoValue, lightOnState];            //  light
+  properties['0xa0, 0x04'] = [onOffAutoValue, lightOnState];            //  light on/off/auto
   properties['0xa8, 0x03'] = [varIntValue,    noop];                    //  fan motion timeout
   properties['0xa8, 0x04'] = [intValue,       lightBrightness];         //  light brightness
   properties['0xa8, 0x08'] = [intValue,       mysteryCode];             //  mystery
+  properties['0xaa, 0x02'] = [textValue,      mysteryCode];             //  mystery (haiku)
   properties['0xb0, 0x03'] = [boolValue,      noop];                    //  fan return to auto on/off
   properties['0xb0, 0x04'] = [intValue,       noop];                    //  brightness as level (0,1-16)
   properties['0xb0, 0x05'] = [weatherValue,   currentTemperature];      //  temperature
@@ -721,7 +769,7 @@ function getPropertiesArray():typeof properties {
   properties['0xb0, 0x09'] = [boolValue,      noop];                    //  prevent additional controls
   properties['0xb8, 0x03'] = [varIntValue,    noop];                    //  fan return to auto after
   properties['0xb8, 0x04'] = [varIntValue,    lightColorTemperature];   //  color temperature
-  properties['0xb8, 0x05'] = [humidityValue,   currentRelativeHumidity]; //  humidity
+  properties['0xb8, 0x05'] = [weatherValue,   currentRelativeHumidity]; //  humidity
   properties['0xb8, 0x08'] = [boolValue,      noop];                    //  beeper
   properties['0xb8, 0x09'] = [intValue,       mysteryCode];             //  mystery
   properties['0xc0, 0x01'] = [intValue,       mysteryCode];             //  mystery
@@ -736,12 +784,13 @@ function getPropertiesArray():typeof properties {
   properties['0xc8, 0x05'] = [intValue,       mysteryCode];             //  mystery
   properties['0xc8, 0x07'] = [intValue,       mysteryCode];             //  mystery
   properties['0xc8, 0x08'] = [intValue,       mysteryCode];             //  mystery
+  properties['0xc8, 0x09'] = [intValue,       mysteryCode];             //  mystery (haiku)
   properties['0xd0, 0x01'] = [intValue,       mysteryCode];             //  mystery
   properties['0xd0, 0x03'] = [boolValue,      whooshOnState];           //  whoosh
   properties['0xd0, 0x04'] = [boolValue,      noop];                    //  light return to auto on/off
   properties['0xd0, 0x08'] = [intValue,       mysteryCode];             //  mystery
   properties['0xd8, 0x01'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xd8, 0x02'] = [onOffAutoValue, fanOnState];              //  fan on
+  properties['0xd8, 0x02'] = [onOffAutoValue, fanOnState];              //  fan on/off/auto
   properties['0xd8, 0x04'] = [varIntValue,    noop];                    //  light return to auto (time)
   properties['0xda, 0x03'] = [intValue,       mysteryCode];             //  mystery
   properties['0xda, 0x0a'] = [intValue,       mysteryCode];             //  mystery
@@ -750,24 +799,29 @@ function getPropertiesArray():typeof properties {
   properties['0xe0, 0x02'] = [boolValue,      fanRotationDirection];    //  rotation direction
   properties['0xe0, 0x03'] = [boolValue,      noop];                    //  comfort heat assist
   properties['0xe0, 0x08'] = [intValue,       mysteryCode];             //  mystery
+  properties['0xe0, 0x0a'] = [intValue,       mysteryCode];             //  mystery (haiku)
   properties['0xe2, 0x04'] = [textValue,      mysteryCode];             //  mystery
   properties['0xe2, 0x07'] = [text2Value,     noop];                    //  SSID
+  properties['0xe2, 0x09'] = [dataValue,      mysteryCode];             //  mystery (haiku)
   properties['0xe8, 0x01'] = [intValue,       mysteryCode];             //  mystery
   properties['0xe8, 0x02'] = [intValue,       noop];                    //  fan speed as %
   properties['0xe8, 0x03'] = [intValue,       mysteryCode];             //  mystery
   properties['0xe8, 0x04'] = [boolValue,      dimToWarmOnState];        //  light dim to warm
+  properties['0xe8, 0x0a'] = [dataValue,      mysteryCode];             //  mystery (haiku)
   properties['0xf0, 0x01'] = [intValue,       mysteryCode];             //  mystery
   properties['0xf0, 0x02'] = [intValue,       fanRotationSpeed];        //  fan rotation speed
   properties['0xf0, 0x03'] = [intValue,       mysteryCode];             //  mystery
   properties['0xf0, 0x04'] = [varIntValue,    noop];                    //  warmest color temperature
+  properties['0xf0, 0x0a'] = [dataValue,      mysteryCode];             //  mystery (haiku)
   properties['0xf8, 0x01'] = [intValue,       mysteryCode];             //  mystery
   properties['0xf8, 0x02'] = [boolValue,      noop];                    //  fan auto comfort
   properties['0xf8, 0x03'] = [intValue,       noop];                    //  revolutions per minute
   properties['0xf8, 0x04'] = [varIntValue,    noop];                    //  coolest color temperature
-  // the follwing props in sean9keenan's 'homebridge-bigAssFans createGetField are not listed above - might be in the mystery category
+  properties['0xf8, 0x0a'] = [intValue,       mysteryCode];             //  mystery (haiku)
+
+  // the following props in sean9keenan's 'homebridge-bigAssFans createGetField are not listed above - might be in the mystery category
   // LIGHT;LEVEL;MIN
   // LIGHT;LEVEL;MAX
-  // LIGHT;AUTO;ON|OFF
   // DEVICE;LIGHT;PRESENT
   // SNSROCC;STATUS;OCCUPIED|UNOCCUPIED
   // SNSROCC;TIMEOUT;MIN
@@ -793,11 +847,12 @@ function getPropertiesArray():typeof properties {
 /**
 * property handler functions
 */
+
 function getModel(value: string, pA:BigAssFans_i6PlatformAccessory) {
   pA.Model = value;
   debugLog(pA, 'newcode', 1, 'model: ' + pA.Model);
 
-  // at one time we thought the Haiku didn't have a humidity sensor, but that may not be correct, so we'lll comment out this code for now
+  // hack for haiku which doesn't seem to support the humidity sensor
   if (value === 'Haiku H/I Series') {
     const service = pA.accessory.getService(pA.platform.Service.HumiditySensor);
     if (service) {
@@ -828,14 +883,20 @@ function lightBrightness(value: number|string, pA:BigAssFans_i6PlatformAccessory
 }
 
 function lightOnState(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
-  if (value === 2) {  // this means the light is in Auto mode -  we don't handle it yet
-    return;
+  if (pA.showLightAutoSwitch) {
+    pA.lightAutoSwitchOn = (value === 2) ? true: false;
+    debugLog(pA, ['newcode', 'characteristics'], [1, 2], 'update light auto: ' + pA.lightAutoSwitchOn);
+    pA.lightAutoSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightAutoSwitchOn);
   }
 
-  const onValue = (value === 0 ? false : true);
-  pA.lightStates.On = onValue;
-  debugLog(pA, 'characteristics', 2, 'update Light On: ' + pA.lightStates.On);
-  pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
+  if (value === 2) {  // this means the light is in Auto mode - don't think we need to do anything but it's complicated
+    // nop
+  } else {
+    const onValue = (value === 0 ? false : true);
+    pA.lightStates.On = onValue;
+    debugLog(pA, ['newcode', 'characteristics'], [1, 2], 'update Light On: ' + pA.lightStates.On);
+    pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
+  }
 }
 
 function fanOnState(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
@@ -904,11 +965,12 @@ function currentTemperature(value: number|string, pA:BigAssFans_i6PlatformAccess
 }
 
 function currentRelativeHumidity(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
-  // debugLog(pA, 'humidity', 1, pA.Name + ' - CurrentRelativeHumidity:' + value);
-  hbLog.debug(pA.Name + ' - CurrentRelativeHumidity:' + value);
+  debugLog(pA, 'humidity', 1, pA.Name + ' - CurrentRelativeHumidity:' + value);
 
   if (value < 0 || value > 100) {
-    pA.platform.log.info('current relative humidity out of range: ' + value + ', ignored');
+    if (pA.Model !== 'Haiku H/I Series') {  // Haiku doesn't seem to support the humidity sensor, it just reports 1000%.  ignore it
+      pA.platform.log.info('current relative humidity out of range: ' + value + ', ignored');
+    }
     return;
   }
 
@@ -1050,11 +1112,6 @@ function text7Value(bytes:Buffer): number|string {
   return(bytes.subarray(3, 8).toString() + ' ' + bytes.subarray(12, 15).toString() + ' ' + bytes.subarray(17).toString());
 }
 
-function humidityValue(bytes:Buffer): number|string {
-  hbLog.debug('humidity codes: '  + hexFormat(bytes));
-  return(bigAssNumber(bytes) / 100);
-}
-
 function weatherValue(bytes:Buffer): number|string {
   return(bigAssNumber(bytes) / 100);
 }
@@ -1168,18 +1225,18 @@ function hexFormat(arg) {
 function debugLog(pA:BigAssFans_i6PlatformAccessory, logTag:string|string[], logLevel:number|number[], logMessage:string) {
   if (typeof(logTag) === 'string') {
     if (pA.debugLevels[logTag] === undefined) {
-      hbLog.warn('no such logging tag: "' + logTag + '", the message is: "' + logMessage + '"');
+      hbLog.warn('no such logging tag: "' + logTag + '", the message from ' + pA.Name + ' is: "' + logMessage + '"');
     }
     if (pA.debugLevels[logTag] >= logLevel) {
-      hbLog.debug('dblog ' + logTag + '(' + logLevel + '/'  + pA.debugLevels[logTag] + ') - ' +  logMessage);
+      hbLog.debug('dblog ' + logTag + '(' + logLevel + '/'  + pA.debugLevels[logTag] + ') ' + pA.Name + ' - ' +  logMessage);
     }
   } else {
     for (let i = 0; i < logTag.length; i++) {
       if (pA.debugLevels[logTag[i]] === undefined) {
-        hbLog.warn('no such logging tag: "' + logTag[i] + '", the message is: "' + logMessage + '"');
+        hbLog.warn('no such logging tag: "' + logTag[i] + '", the message from ' + pA.Name + ' is: "' + logMessage + '"');
       }
       if (pA.debugLevels[logTag[i]] >= logLevel[i]) {
-        hbLog.debug('dblog ' + logTag[i] + '(' + logLevel[i] + '/' + pA.debugLevels[logTag[i]] + ') - ' +  logMessage);
+        hbLog.debug('dblog ' + logTag[i] + '(' + logLevel[i] + '/' + pA.debugLevels[logTag[i]] + ') ' + pA.Name + ' - ' +  logMessage);
       }
     }
   }
