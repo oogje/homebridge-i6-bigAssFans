@@ -152,7 +152,7 @@ export class BigAssFans_i6Platform implements DynamicPlatformPlugin {
 
 import net = require('net');
 // let timeoutID: NodeJS.Timeout;
-let timeoutIDs:NodeJS.Timeout[] = [];
+const timeoutIDs:NodeJS.Timeout[] = [];
 function checkDevice(platform: BigAssFans_i6Platform, ip: string, cb) {
   const client = net.connect(31415, ip, () => {
     const b = Buffer.from([0xc0, 0x12, 0x02, 0x1a, 0x00, 0xc0]);
