@@ -270,9 +270,6 @@ export class BigAssFans_i6PlatformAccessory {
     */
     networkSetup(this);
     debugLog(this, 'progress', 1, 'constructed');
-
-    debugLog(this, 'test1', 1, 'constructed');
-    debugLog(this, ['test2', 'test 3'], [1, 1], 'constructed');
   }
 
   /**
@@ -603,6 +600,18 @@ function processFanMessage(platformAccessory: BigAssFans_i6PlatformAccessory, da
 
   const rawChunk = data;  // data buffer gets modified as we go along.  rawChunk is a copy of the unmodified buffer for debugging logs
 
+  // first byte is 0xc0
+  // then a big-assed-number (number of remaining bytes in chunk) followed by 0x22
+  // -then-
+  // possibly a big-assed-number (2nd-number-of-remaining-bytes-in-chunk) followed by 0x12, the property-size, the property and values,
+  //   repeated until the 2nd-number-of-remaining-bytes-in-chunk is consumed, then a 72-byte token-like-thing starting with 0x28
+  //   i6 - 0xc0, 0x12, 0x75, 0x22, 0x2b, 0x12, 0x03, 0xb8, 0x09, 0x01, 0x12, ..., 0x28, ...
+  //   -or-
+  // possibly a big-assed-number (2nd-number-of-remaining-bytes-in-chunk) which is actually the the property-size, then the property and
+  //   values.
+  //   i6 - 0xc0, 0x12, 0x50, 0x22, 0x06, 0x1a, 0x04, 0x08, 0x03, 0x20, 0x10, 0x28, ...
+
+
   if (data[0] !== 0xc0) {
     log.warn('expected start of message chunk (0x0c), got: ' + hexFormat(data[0]));
     debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
@@ -637,31 +646,51 @@ function processFanMessage(platformAccessory: BigAssFans_i6PlatformAccessory, da
   }
   data = data.subarray(1); // remove the field separator (0x22)
 
-  // accumulate remaining size (bigAssNumber)
-  banArray = [];
-  while (data.length > 0 && (data[0] !== 0x12 && data[0] !== 0x1a)) {  // 0x12 or 0x1a, apparently neither can be part of a bigAssNumber?
-    banArray.push(data[0]);
-    data = data.subarray(1); // remove the byte we just consumed
-  }
-  const chunkSizeSansToken = bigAssNumber(Buffer.from(banArray));
+  // if it's the new (after 4/4/2022) Haiku firmware then the mystery (token?) data at the end of the chunk isn't present
 
-
-  // this assertion about the remining data length may be entirely unnecessary
   const tokenLength = platformAccessory.OldProtocolFlag ? 72 : 0;
-  const assumedChunkSize = chunkSizeSansToken + tokenLength + 1;
 
-  // if it's the new (after 4/4/2022) Haiku firmware then don't add in the token length - i.e. check for chunkSizeSansToken + 1
-  if (data.length !== assumedChunkSize) { // the "+ 1" is for the terminating 0xc0
+  let chunkSizeSansToken:number;
+
+  // <0xc0><0x12><BAN><0x22><size of chunk>[0x12]<nn><nn bytes><0x28><71 bytes><0xc0>
+
+  if (platformAccessory.OldProtocolFlag && data[0] === ((data.length - tokenLength) - 2))  { // -1 for the final 0xc0, -1 for the prop size
+    //  this must be a single property message like:
+    //  0xc0, 0x12, 0x50, 0x22, 0x06, 0x1a, 0x04, 0x08, 0x03, 0x20, 0x10, 
+    //  0x28, 0xcd, 0xf0, 0xc3, 0x92, 0x06, 0x32, 0x40, 0x64, 0x62, 0x34, 
+    //  0x30, 0x62, 0x34, 0x39, 0x63, 0x37, 0x38, 0x36, 0x65, 0x39, 0x61,
+    //  0x66, 0x66, 0x63, 0x63, 0x62, 0x33, 0x38, 0x65, 0x30, 0x35, 0x34, 
+    //  0x39, 0x30, 0x32, 0x30, 0x61, 0x33, 0x66, 0x32, 0x64, 0x35, 0x30, 
+    //  0x30, 0x32, 0x34, 0x65, 0x38, 0x62, 0x33, 0x37, 0x32, 0x39, 0x38, 
+    //  0x37, 0x64, 0x33, 0x33, 0x34, 0x36, 0x64, 0x30, 0x65, 0x37, 0x66, 
+    //  0x65, 0x39, 0x63, 0x61, 0x35, 0x30, 0xc0
+    //  so there is no big assed number and no 0x12 to indicate the start of the property, 
+    //  it's just the one property and the weird 0x28 delimited end sequence (token?)
+    chunkSizeSansToken = data[0] + 2; // +1 for the 0x12 we're going to insert at the beginning, and 1 for the final oxc0
+
+  // stuff a start byte (0x12) to make everything copacetic down the road
+    data = Buffer.concat([Buffer.from([0x12]), data]);
+  } else {
+    // accumulate remaining size (bigAssNumber)
+    banArray = []
+    while (data.length > 0 && data[0] !== 0x12) {  // apparently 0x12 can not be part of this bigAssNumber?
+      banArray.push(data[0]);
+      data = data.subarray(1); // remove the byte we just consumed
+    }  
+    chunkSizeSansToken = bigAssNumber(Buffer.from(banArray));
+  }
+
+  const assumedChunkSize = chunkSizeSansToken + tokenLength + 1; // the "+ 1" is for the terminating 0xc0
+
+  // this assertion about the remaining data length may be entirely unnecessary
+
+  if (data.length !== assumedChunkSize) { 
     // repeating the log.warn text because warnings and debug messages are not displayed in synchrony
     log.warn('chunkSizeSansToken: ' + assumedChunkSize + ', not what we expected with data length: ' + data.length);
     debugLog(platformAccessory,
       'network', 3, 'chunkSizeSansToken: ' + assumedChunkSize + ', not what we expected with data length: ' + data.length);
     debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
     return;
-  }
-
-  if (data[0] !== 0x12) { // then it must be 0x1a.
-    // let's see what happens if we just pass it through
   }
 
   /**
@@ -676,12 +705,12 @@ function processFanMessage(platformAccessory: BigAssFans_i6PlatformAccessory, da
         debugLog(platformAccessory, 'network', 2, 'surprise! token length was: ' + data.length);
       }
     }
-    if (data[0] !== 0x12 && data[0] !== 0x1a) {
-      platformAccessory.platform.log.warn('expected 0x12 or 0x1a, got: ', hexFormat(data.subarray(0, 1)));
+    if (data[0] !== 0x12) {
+      platformAccessory.platform.log.warn('expected 0x12, got: ', hexFormat(data.subarray(0, 1)));
       debugLog(platformAccessory, 'network', 2, 'unexpected byte in chunk:  ' + hexFormat(data) + ' from: ' + hexFormat(rawChunk));
       return;
     }
-    data = data.subarray(1);  // remove the 'start of header' (0x12 or 0x1a) from the remaining data
+    data = data.subarray(1);  // remove the 'start of header' (0x12) from the remaining data
 
     len = data[0];
     data = data.subarray(1);  // remove the 'length' byte from the remaining data
@@ -731,18 +760,18 @@ function getPropertiesArray():typeof properties {
   const properties: (((v: number | string, p: BigAssFans_i6PlatformAccessory, s: string) => void) |
   ((b: Buffer|string, p: BigAssFans_i6PlatformAccessory) => string))[][] = [];
   // many of the same codes occur in multiple chunks  (or in the same chunk?)
-  properties['0x08, 0x03'] = [dataValue,      mysteryCode],             //  something to do with schedules
   properties['0x0a'] =       [text3Value,     noop];                    //  name
   properties['0x12'] =       [textValue,      getModel];                //  model
+  properties['0x1a'] =       [dataValue,      mysteryCode],             //  something to do with schedules
   properties['0x18, 0xc0'] = [dataValue,      mysteryCode];             //  mystery
   properties['0x22'] =       [text3Value,     noop];                    //  local datetime
   properties['0x2a'] =       [text3Value,     noop];                    //  zulu datetime
   properties['0x32'] =       [text3Value,     noop];                    //  mystery datetime
   properties['0x3a'] =       [text3Value,     noop];                    //  mystery firmware (sometimes zero-length?!)
   properties['0x42'] =       [text3Value,     noop];                    //  MAC address
-  properties['0x4a, 0x24'] = [textValue,      mysteryCode];             //  mystery
-  properties['0x52, 0x24'] = [textValue,      mysteryCode];             //  mystery
-  properties['0x5a, 0x12'] = [text3Value,     noop];                    //  website
+  properties['0x4a'] =       [textValue,      mysteryCode];             //  mystery - token
+  properties['0x52'] =       [textValue,      mysteryCode];             //  mystery - token
+  properties['0x5a'] =       [textValue,      noop];                    //  website - api.bigassfans.com
   properties['0x6a, 0x01'] = [intValue,       mysteryCode];             //  mystery
   properties['0x70'] =       [intValue,       mysteryCode];             //  mystery
   properties['0x78'] =       [intValue,       mysteryCode];             //  mystery
@@ -773,7 +802,7 @@ function getPropertiesArray():typeof properties {
   properties['0xb8, 0x03'] = [varIntValue,    noop];                    //  fan return to auto after
   properties['0xb8, 0x04'] = [varIntValue,    lightColorTemperature];   //  color temperature
   properties['0xb8, 0x05'] = [weatherValue,   currentRelativeHumidity]; //  humidity
-  properties['0xb8, 0x08'] = [boolValue,      noop];                    //  beeper
+  properties['0xb8, 0x08'] = [boolValue,      noop];                    //  fan beep
   properties['0xb8, 0x09'] = [intValue,       mysteryCode];             //  mystery
   properties['0xc0, 0x01'] = [intValue,       mysteryCode];             //  mystery
   properties['0xc0, 0x04'] = [intValue,       mysteryCode];             //  mystery
