@@ -63,8 +63,8 @@ Example configuration simple:
       "platform": "BigAssFans-i6",
             "fans": [
                 {
-                    "name": "Big Fan",
-                    "mac": "b8:f0:09:ac:db:b6",
+                    "name": "Big Fan i6",
+                    "mac": "20:F8:5E:00:00:00",
                     "ip": "192.168.7.150"
                 }
             ]
@@ -82,7 +82,7 @@ Example configuration with optional params and multiple fans:
       "platform": "BigAssFans-i6",
               "fans": [
                   {
-                    "name": "BigAssFans-i6",
+                    "name": "Big Fan i6",
                     "mac": "20:F8:5E:00:00:00",
                     "ip": "192.168.1.150",
                     "fanAuto": true,
@@ -91,7 +91,7 @@ Example configuration with optional params and multiple fans:
                     "dimToWarm": false
                   },
                   {
-                    "name": "BigAssFans-Haiku",
+                    "name": "BigAssFans Haiku",
                     "mac": "20:F8:5E:00:00:00",
                     "ip": "192.168.1.151",
                     "fanAuto": true,
