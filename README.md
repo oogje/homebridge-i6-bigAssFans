@@ -87,8 +87,8 @@ Example configuration with optional params and multiple fans:
                     "ip": "192.168.1.150",
                     "fanAuto": true,
                     "lightAuto": true,
-                    "whoosh": true,
-                    "ecoMode": true
+                    "whoosh": false,
+                    "dimToWarm": false
                   },
                   {
                     "name": "BigAssFans-Haiku",
