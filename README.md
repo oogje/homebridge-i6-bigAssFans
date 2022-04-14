@@ -73,7 +73,7 @@ Example configuration simple:
 }
 ```
 
-Example configuration with optional params:
+Example configuration with optional params and multiple fans:
 
 ```js
 {
