@@ -524,8 +524,8 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     if (this.lightAutoSwitchOn === false && this.lightStates.On === true) {
-      debugLog(this, 'newcode', 1, 'write ..., 0xa0, 0x04, 0x02, 0xc0 to fan');
-      this.setLightOnState(1);
+      debugLog(this, 'newcode', 1, 'write ..., 0xa0, 0x04, 0x01, 0xc0 to fan');
+      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, 0x01, 0xc0])), this);
     }
 
   }
@@ -861,7 +861,7 @@ function getPropertiesArray():typeof properties {
   properties['0x88, 0x02'] = [intValue,       mysteryCode];             //  mystery
   properties['0x88, 0x03'] = [intValue,       mysteryCode];             //  mystery
   properties['0x88, 0x04'] = [intValue,       ecoModeOnState];          //  eco mode (haiku)
-  properties['0x8a, 0x01'] = [dataValue,      mysteryCode];             //  mystery (haiku)
+  properties['0x8a, 0x01'] = [dataValue,      capabilities];             //  mystery (haiku)
   properties['0x90, 0x03'] = [intValue,       noop];                    //  comfort min speed
   properties['0x90, 0x05'] = [intValue,       mysteryCode];             //  mystery (haiku)
   properties['0x9a, 0x05'] = [dataValue,      mysteryCode];             //  mystery (haiku)
@@ -959,6 +959,25 @@ function getPropertiesArray():typeof properties {
 * property handler functions
 */
 
+function capabilities(value: string, pA:BigAssFans_i6PlatformAccessory) {
+  // it's a stretch to think I can parse this.  So far I've only seen it on Haikus
+  // wojo fan with light
+  // 0x12, 0x11, 0x8a, 0x01, 0x0e, 0x08, 0x01, 0x18, 0x01, 0x20, 0x01, 0x38, 0x01, 0x48, 0x01, 0x50, 0x01, 0x70, 0x01
+  // wojo fan without light
+  // 0x12, 0x0f, 0x8a, 0x01, 0x0c, 0x08, 0x01, 0x18, 0x01, 0x38, 0x01, 0x48, 0x01, 0x50, 0x01, 0x70, 0x01
+  // Klidec
+  // 0x12, 0x11, 0x8a, 0x01, 0x0e, 0x08, 0x01, 0x18, 0x01, 0x20, 0x01, 0x38, 0x01, 0x48, 0x01, 0x50, 0x01, 0x70, 0x01,
+  if (value.indexOf('0x20, 0x01') === -1) {
+    debugLog(pA, 'newcode', 1, 'no light detected');
+    const service = pA.accessory.getService(pA.platform.Service.Lightbulb);
+    if (service) {
+      pA.accessory.removeService(service);
+    }
+  } else {
+    debugLog(pA, 'newcode', 1, 'light detected');
+  }
+}
+
 function getModel(value: string, pA:BigAssFans_i6PlatformAccessory) {
   pA.Model = value;
   debugLog(pA, 'newcode', 1, 'model: ' + pA.Model);
@@ -1035,14 +1054,17 @@ function lightColorTemperature(value: number|string, pA:BigAssFans_i6PlatformAcc
 function lightBrightness(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
   if (value !== 0) { // don't tell homebridge brightness is zero, it only confuses it.  It'll find out it's off in soon enough.
     pA.lightStates.homeShieldUp = false;
-    if ((value as number) === pA.lightStates.Brightness) {
-      debugLog(pA, 'newcode', 1,
-        'lightBrightness - ignoring redundant update: ((' + (value as number) + ') === ' + pA.lightStates.Brightness + ')');
-    } else {
-      pA.lightStates.Brightness = (value as number);
-      debugLog(pA, 'characteristics', 1, 'update Brightness: ' + pA.lightStates.Brightness);
-      pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.Brightness, pA.lightStates.Brightness);
-    }
+    // if ((value as number) === pA.lightStates.Brightness) {
+    //   debugLog(pA, 'newcode', 1,
+    //     'lightBrightness - ignoring redundant update: ((' + (value as number) + ') === ' + pA.lightStates.Brightness + ')');
+    // } else {
+    pA.lightStates.Brightness = (value as number);
+    debugLog(pA, 'characteristics', 1, 'update Brightness: ' + pA.lightStates.Brightness);
+    pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.Brightness, pA.lightStates.Brightness);
+    // }
+    pA.lightStates.On = true;
+    debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update Light On From lightBrightness: ' + pA.lightStates.On);
+    pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
   } else {
     if (pA.lightAutoSwitchOn) {
       // tell homekit the light is off
@@ -1327,7 +1349,7 @@ function weatherValue(bytes:Buffer): number|string {
   return(bigAssNumber(bytes) / 100);
 }
 
-function dataValue(bytes:Buffer): number|string {
+function dataValue(bytes:Buffer): string {
   return(hexFormat(bytes));
 }
 
