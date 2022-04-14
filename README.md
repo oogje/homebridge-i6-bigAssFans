@@ -34,8 +34,8 @@ issue a command (e.g., turn on the light) as oppposed to the periodic probe mess
 * See the fan's temperature sensors (Haiku Fans).
 * Turn Whoosh Mode on or off.
 * Turn Dim to Warm on or off (i6 only).
-* Turn fan's Auto mode on or off.
-* Turn the the lights Auto mode on or off
+* Turn fan's fan Auto mode on or off.
+* Turn the fan's light Auto mode on or off
 * Turn on Eco Mode (Haiku fans only)
 
 ### Installation
