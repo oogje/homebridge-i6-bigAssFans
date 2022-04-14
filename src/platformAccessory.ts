@@ -58,8 +58,10 @@ export class BigAssFans_i6PlatformAccessory {
   public IP: string;
   public MAC: string;
   public Name = 'naamloos';
-  public SSID = 'apname';
+  public ProbeFrequency = 60000;
+
   public Model = 'unknown model';
+  public SSID = 'apname';
   public Firmware = '';
   public OldProtocolFlag:boolean|undefined = undefined;
 
@@ -145,6 +147,12 @@ export class BigAssFans_i6PlatformAccessory {
     if (accessory.context.device.ecoMode) {
       this.showEcoModeSwitch = true;  // defaults to false in property initialization
     }
+
+    if (accessory.context.device.probeFrequency !== undefined) {
+      this.ProbeFrequency = accessory.context.device.probeFrequency;
+      debugLog(this, 'progress',  1, 'set ProbeFrequency to: ' + this.ProbeFrequency);
+    }
+
 
     /**
     * set accessory information
@@ -301,10 +309,14 @@ export class BigAssFans_i6PlatformAccessory {
   */
 
   async setLightOnState(value: CharacteristicValue) {
-    debugLog(this, 'characteristics',  2, 'Set Characteristic Light On -> ' + value);
-    this.lightStates.On = value as boolean;
+    debugLog(this, 'characteristics',  1, 'Set Characteristic Light On -> ' + value);
 
-    clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, (this.lightStates.On ? 0x01 : 0x00), 0xc0])), this);
+    if (this.lightStates.On && (value as boolean)) {
+      debugLog(this, 'newcode', 1, 'setLightOnState: light is already on, ignore this');
+    } else {
+      this.lightStates.On = value as boolean;
+      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, (this.lightStates.On ? 0x01 : 0x00), 0xc0])), this);
+    }
   }
 
   async getLightOnState(): Promise<CharacteristicValue> {
@@ -594,20 +606,22 @@ function networkSetup(platformAccessory: BigAssFans_i6PlatformAccessory) {
     onData(platformAccessory, data);
   });
 
-  // attempt to prevent the occassional socket reset.
-  // sending the mysterious code that the vendor app seems to send once every 15s but I'll go with every minute -  didn't prevent it.
-  // can try going to every 15 seconds like the vendor app seems to do. - didn't work
-  // perhaps I need to call socket.setKeepAlive([enable][, initialDelay]) when I establish it above? - nope, didn't help
-  // obviously, I don't understand this stuff.
-  // now I got an EPIPE 5+ hours after a reset, and repeaated EPIPEs evert minute for the next 7 minutes, then one more after 4 minutes
-  // then clear sailing for 1+ hours so far.
-  setInterval(( )=> {
-    if (platformAccessory.client !== undefined) {
-      clientWrite(platformAccessory.client, Buffer.from([0xc0, 0x12, 0x04, 0x1a, 0x02, 0x08, 0x03, 0xc0]), platformAccessory);
-    } else {
-      debugLog(platformAccessory, 'network', 4, 'client undefined in setInterval callback');
-    }
-  }, 60000);
+  if (platformAccessory.ProbeFrequency !== 0) {
+    // attempt to prevent the occassional socket reset.
+    // sending the mysterious code that the vendor app seems to send once every 15s but I'll go with every minute -  didn't prevent it.
+    // can try going to every 15 seconds like the vendor app seems to do. - didn't work
+    // perhaps I need to call socket.setKeepAlive([enable][, initialDelay]) when I establish it above? - nope, didn't help
+    // obviously, I don't understand this stuff.
+    // now I got an EPIPE 5+ hours after a reset, and repeaated EPIPEs evert minute for the next 7 minutes, then one more after 4 minutes
+    // then clear sailing for 1+ hours so far.
+    setInterval(( )=> {
+      if (platformAccessory.client !== undefined) {
+        clientWrite(platformAccessory.client, Buffer.from([0xc0, 0x12, 0x04, 0x1a, 0x02, 0x08, 0x03, 0xc0]), platformAccessory);
+      } else {
+        debugLog(platformAccessory, 'network', 4, 'client undefined in setInterval callback');
+      }
+    }, platformAccessory.ProbeFrequency);
+  }
 }
 
 function onData(platformAccessory: BigAssFans_i6PlatformAccessory, data: Buffer) {
@@ -1021,9 +1035,14 @@ function lightColorTemperature(value: number|string, pA:BigAssFans_i6PlatformAcc
 function lightBrightness(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
   if (value !== 0) { // don't tell homebridge brightness is zero, it only confuses it.  It'll find out it's off in soon enough.
     pA.lightStates.homeShieldUp = false;
-    pA.lightStates.Brightness = (value as number);
-    debugLog(pA, 'characteristics', 1, 'update Brightness: ' + pA.lightStates.Brightness);
-    pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.Brightness, pA.lightStates.Brightness);
+    if ((value as number) === pA.lightStates.Brightness) {
+      debugLog(pA, 'newcode', 1,
+        'lightBrightness - ignoring redundant update: ((' + (value as number) + ') === ' + pA.lightStates.Brightness + ')');
+    } else {
+      pA.lightStates.Brightness = (value as number);
+      debugLog(pA, 'characteristics', 1, 'update Brightness: ' + pA.lightStates.Brightness);
+      pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.Brightness, pA.lightStates.Brightness);
+    }
   } else {
     if (pA.lightAutoSwitchOn) {
       // tell homekit the light is off
@@ -1036,6 +1055,11 @@ function lightBrightness(value: number|string, pA:BigAssFans_i6PlatformAccessory
 
 function lightOnState(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
   debugLog(pA, 'newcode', 1, 'lightOnState value: ' + value);
+
+  // if (value === 1 && pA.lightStates.On && pA.lightAutoSwitchOn) {
+  //   debugLog(pA, 'newcode', 1, 'ignoring lightOnState - (value === 1 && pA.lightStates.On && pA.lightAutoSwitchOn)');
+  //   return;
+  // }
 
   if (value === 2 && pA.lightAutoSwitchOn) {
     pA.lightStates.On = true;
@@ -1054,10 +1078,6 @@ function lightOnState(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
   if (value === 2 && pA.lightStates.On) {
     debugLog(pA, 'newcode', 1, 'ignore auto on value, the light is already on');
     return;
-    // pA.lightStates.On = true;
-    // debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update Light On: ' + pA.lightStates.On);
-    // pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
-    // return;
   }
 
   if (value === 2 && !pA.lightStates.On) { // light was off, auto switch was turned on, leave the light off
