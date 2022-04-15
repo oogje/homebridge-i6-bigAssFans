@@ -649,12 +649,215 @@ function onData(platformAccessory: BigAssFans_i6PlatformAccessory, data: Buffer)
   }
   debugLog(platformAccessory, 'network', 11, 'raw (unstuffed) data: ' + hexFormat(unstuff(data, platformAccessory)));
 
+  let processedMessageArray:string[][];
   // parse each chunk and issue any interesting updates to homekit.
   for (let i = 0; i < numChunks; i++) {
-    processFanMessage(platformAccessory, unstuff(chunks[i], platformAccessory));
+    processedMessageArray = preProcess(platformAccessory, unstuff(chunks[i], platformAccessory));
+
+    processedMessageArray.sort(sortFunction);
+    for (let j = 0; j < processedMessageArray.length; j++) {
+      debugLog(platformAccessory, 'newcode', 10, processedMessageArray[j][0]);
+
+      const propertyHandlerFunction = platformAccessory.propertiesTable[processedMessageArray[j][0]][PROPERTYHANDLERFUNCTION];
+      if (propertyHandlerFunction === undefined) {
+        platformAccessory.platform.log.warn('undefined handler for:', processedMessageArray[j][0]);
+        continue;
+      }
+      propertyHandlerFunction(processedMessageArray[j][1], platformAccessory, processedMessageArray[j][0]);
+    }
   }
 }
 
+function sortFunction(a, b) {
+  if (a[0] === b[0]) {
+    return 0;
+  } else {
+    return (a[0] < b[0]) ? -1 : 1;
+  }
+}
+
+function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typeof Buffer):string[][] {
+  const log = platformAccessory.platform.log;
+  let len = 0;
+  let propertyFields: typeof Buffer;
+
+  const rawChunk = data;  // data buffer gets modified as we go along.  rawChunk is a copy of the unmodified buffer
+
+  // dealing with a protocol ambiguity in the i6 pre 2022
+  // first byte is 0xc0
+  // then a big-assed-number (number of remaining bytes in chunk) followed by 0x22
+  // -then-
+  // (a) possibly a big-assed-number (2nd-number-of-remaining-bytes-in-chunk) followed by 0x12, the property-size, the property and values,
+  //   repeated until the 2nd-number-of-remaining-bytes-in-chunk is consumed, then a 72-byte token-like-thing starting with 0x28
+  //   -or-
+  // (b) possibly a big-assed-number (2nd-number-of-remaining-bytes-in-chunk) which is actually the the property-size, then the property and
+  //   values.
+  //
+  // a simple text property has a one-byte property type of '0x12', so beware of a data chunk of case (b) that begins with a simeple text
+  // property like model-type.  E.g., 0xc0, 0x12, 0x50, 0x22, 0x05, 0x12, 0x03, 0x69, 0x36, 0x28, ..., 0xc0.  I've not seen that happen yet.
+
+  // case (a) i6 example:
+  //  0xc0, 0x12, 0x75, 0x22, 0x2b, 0x12, 0x03, 0xb8, 0x09, 0x01, 0x12, ..., 0x28, ..., 0xc0
+  // case (b) i6 example:
+  //  0xc0, 0x12, 0x50, 0x22, 0x06, 0x1a, 0x04, 0x08, 0x03, 0x20, 0x10, 0x28, ..., 0xc0
+
+  // how to determine if it's case (a) or (b)?
+  // getting to the 0x22 is straightforward.
+  // if case (b) should satisify some assumptions:
+  //   1) the value after 0x22 is a one-byte big-assed-number because we ASS-U-ME no property/value message is larger that 255 bytes.  thus
+  //      post 0x22 data length < 255.
+  //   2) the value after the one-byte big-assed-number is not 0x12 (start of property/value message) [see note above about simple text]
+  //   3) the value after the 0x22 is the size of the single property/value message in the data chunk.
+  //   4) that size plus remainingChunkSize + 1 (terminating 0xc0) == data.length
+
+  if (data[0] !== 0xc0) {
+    log.warn('expected start of message chunk (0x0c), got: ' + hexFormat(data[0]));
+    debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
+    return [];
+  }
+  data = data.subarray(1); // remove 0xc0
+
+  if (data[0] !== 0x12) {
+    log.warn('expected start of message header (0x12), got: ' + hexFormat(data[0]));
+    debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
+    return [];
+  }
+  data = data.subarray(1); // remove 0x12
+
+  // accumulate remaining size (bigAssNumber)
+  let banArray:number[] = [];
+  while (data.length > 0 && data[0] !== 0x22) { // field separator
+    banArray.push(data[0]);
+    data = data.subarray(1); // remove the byte we just consumed
+  }
+  const remainingChunkSize = bigAssNumber(Buffer.from(banArray));
+
+  if (data.length !== (remainingChunkSize + 1)) { // add in the 0xc0
+    log.warn('this is not the chunk size we\'re looking for: ' + remainingChunkSize + ', actual: ' + data.length);
+    debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
+    return [];
+  }
+  if (data.length === 0 || data[0] !== 0x22) {
+    log.warn('not good.  apparently we ran off the end of the data buffer');
+    debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
+    return [];
+  }
+  data = data.subarray(1); // remove the field separator (0x22)
+
+  // if it's the new (circa 4/4/2022) Haiku firmware then the mystery (token?) data at the end of the chunk isn't present
+
+  const tokenLength = platformAccessory.OldProtocolFlag ? 72 : 0;
+
+  let chunkSizeSansToken:number;
+
+  if ((rawChunk.length - data.length) === (data[0] - (1 + 1)))  { // (1 + 1): 1 for the prop size, 1 for the final 0xc0
+    chunkSizeSansToken = data[0] + 2; // +1 for the 0x12 we're going to insert at the beginning, and 1 for the final oxc0
+
+    // stuff a start byte (0x12) to make everything copacetic down the road
+    data = Buffer.concat([Buffer.from([0x12]), data]);
+
+    // if (platformAccessory.Model !== 'i6' && platformAccessory.Model !== 'unknown model') {
+    //   debugLog(platformAccessory, 'cluing', 2, 'Et tu, "' + platformAccessory.Model + '"');
+    // }
+  } else {
+    // accumulate remaining size (bigAssNumber)
+    banArray = [];
+    while (data.length > 0 && data[0] !== 0x12) {  // apparently 0x12 can not be part of this bigAssNumber?
+      banArray.push(data[0]);
+      data = data.subarray(1); // remove the byte we just consumed
+    }
+    chunkSizeSansToken = bigAssNumber(Buffer.from(banArray));
+  }
+
+  const assumedChunkSize = chunkSizeSansToken + tokenLength + 1; // the "+ 1" is for the terminating 0xc0
+
+  // this assertion about the remaining data length may be entirely unnecessary
+
+  if (data.length !== assumedChunkSize) {
+    if (data.length === (assumedChunkSize + 72)) {
+      debugLog(platformAccessory, 'network', 1, 'would be chunkSizeSansToken warning averted');
+      if (platformAccessory.OldProtocolFlag === undefined) {
+        debugLog(platformAccessory, 'network', 1, 'platformAccessory.OldProtocolFlag === undefined');
+      } else {
+        debugLog(platformAccessory, 'network', 1, 'OldProtocolFlag: ' + platformAccessory.OldProtocolFlag);
+      }
+    } else {
+      // repeating the log.warn text because warnings and debug messages are not displayed in synchrony
+      log.warn('chunkSizeSansToken: ' + assumedChunkSize + ', not what we expected with data length: ' + data.length);
+      debugLog(platformAccessory,
+        'network', 1, 'chunkSizeSansToken: ' + assumedChunkSize + ', not what we expected with data length: ' + data.length);
+      debugLog(platformAccessory, 'network', 1, 'OldProtocolFlag: ' + platformAccessory.OldProtocolFlag);
+      debugLog(platformAccessory, 'network', 1, 'rawChunk: ' + hexFormat(rawChunk));
+
+      return [];
+    }
+  }
+
+  const processedMessageArray:string[][] = [];
+  /**
+  * pick out the property code and send it to the decode function to get the value from its
+  * coded field.  Then call the property's handler function to act on the message's contents (or not.)
+  */
+  while (data[0] !== 0xc0) {
+    if (data[0] === 0x28) { // 0x28 is the start of what looks like a token 72 bytes long followed by 0xc0 end of chunk.
+      if (data.length === 73) {
+        return processedMessageArray;
+      } else {
+        debugLog(platformAccessory, 'network', 3, 'surprise! token length was: ' + data.length);
+      }
+    }
+    if (data[0] !== 0x12) {
+      platformAccessory.platform.log.warn('expected 0x12, got: ', hexFormat(data.subarray(0, 1)));
+      debugLog(platformAccessory, 'network', 3, 'unexpected byte in chunk:  ' + hexFormat(data) + ' from: ' + hexFormat(rawChunk));
+      return processedMessageArray;
+    }
+    data = data.subarray(1);  // remove the 'start of header' (0x12) from the remaining data
+
+    len = data[0];
+    data = data.subarray(1);  // remove the 'length' byte from the remaining data
+
+    propertyFields = data.subarray(0, len); // this is the message - property code and value
+    data = data.subarray(len);  // remove the message from the remaining data
+
+    let hdrsize = 2; // most property headers are two bytes
+    if (platformAccessory.oneByteHeaders.includes(propertyFields[0])) {
+      hdrsize = 1;
+    }
+
+    const propertyCodeString = hexFormat(propertyFields.subarray(0, hdrsize));
+    const propertyValueField = propertyFields.subarray(hdrsize);
+
+    if (platformAccessory.propertiesTable[propertyCodeString] === undefined) {
+      platformAccessory.platform.log.warn('propertiesTable[' + propertyCodeString + '] === undefined');
+      continue;
+    }
+
+    const decodeValueFunction = platformAccessory.propertiesTable[propertyCodeString][DECODEVALUEFUNCTION];
+    if (decodeValueFunction === undefined) {
+      platformAccessory.platform.log.warn('No value decoding function for: ', propertyCodeString);
+    }
+    const decodedValue = decodeValueFunction(propertyValueField, platformAccessory, 'noop');
+    if (decodedValue === undefined) {
+      platformAccessory.platform.log.warn('Could not decode value for: ', propertyCodeString);
+      continue;
+    }
+
+    // some unknown codes might be under surveillance - check if this is one of them?
+    codeWatch(propertyCodeString, decodedValue, propertyValueField, platformAccessory);
+
+    const propertyHandlerFunction = platformAccessory.propertiesTable[propertyCodeString][PROPERTYHANDLERFUNCTION];
+    if (propertyHandlerFunction === undefined) {
+      platformAccessory.platform.log.warn('undefined handler for:', propertyCodeString);
+      continue;
+    }
+
+    // propertyHandlerFunction(decodedValue, platformAccessory, propertyCodeString);
+    processedMessageArray.push([propertyCodeString, decodedValue]);
+  }
+  return processedMessageArray;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function processFanMessage(platformAccessory: BigAssFans_i6PlatformAccessory, data: typeof Buffer) {
   const log = platformAccessory.platform.log;
   let len = 0;
