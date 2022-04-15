@@ -980,7 +980,7 @@ function capabilities(value: string, pA:BigAssFans_i6PlatformAccessory) {
 
 function getModel(value: string, pA:BigAssFans_i6PlatformAccessory) {
   pA.Model = value;
-  debugLog(pA, 'newcode', 1, 'model: ' + pA.Model);
+  debugLog(pA, 'newcode', 5, 'model: ' + pA.Model);
 
   pA.accessory.getService(pA.platform.Service.AccessoryInformation)!
     .setCharacteristic(pA.platform.Characteristic.Model, pA.Model);
@@ -990,7 +990,7 @@ function getModel(value: string, pA:BigAssFans_i6PlatformAccessory) {
     const service = pA.accessory.getService(pA.platform.Service.HumiditySensor);
     if (service) {
       pA.accessory.removeService(service);
-      debugLog(pA, 'newcode', 2, 'no HumiditySensor for you!');
+      debugLog(pA, 'newcode', 4, 'no HumiditySensor for you!');
     }
   }
 
@@ -999,7 +999,7 @@ function getModel(value: string, pA:BigAssFans_i6PlatformAccessory) {
     const service = pA.accessory.getService(pA.platform.Service.TemperatureSensor);
     if (service) {
       pA.accessory.removeService(service);
-      debugLog(pA, 'newcode', 2, 'no TemperatureSensor for you either!');
+      debugLog(pA, 'newcode', 4, 'no TemperatureSensor for you either!');
     }
   }
 }
@@ -1012,7 +1012,7 @@ function firmwareVersion(value: string, pA: BigAssFans_i6PlatformAccessory) {
   } else {
     pA.Firmware = 'nil';
   }
-  debugLog(pA, 'newcode', 3, 'firmware: ' + pA.Firmware);
+  debugLog(pA, 'newcode', 5, 'firmware: ' + pA.Firmware);
 }
 
 function noopDateTime(value: string, pA:BigAssFans_i6PlatformAccessory) {
@@ -1052,12 +1052,8 @@ function lightColorTemperature(value: number|string, pA:BigAssFans_i6PlatformAcc
 }
 
 function lightBrightness(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
-  if (value !== 0) { // don't tell homebridge brightness is zero, it only confuses it.  It'll find out it's off in soon enough.
+  if (value !== 0) {
     pA.lightStates.homeShieldUp = false;
-    // if ((value as number) === pA.lightStates.Brightness) {
-    //   debugLog(pA, 'newcode', 1,
-    //     'lightBrightness - ignoring redundant update: ((' + (value as number) + ') === ' + pA.lightStates.Brightness + ')');
-    // } else {
     pA.lightStates.Brightness = (value as number);
     debugLog(pA, 'characteristics', 1, 'update Brightness: ' + pA.lightStates.Brightness);
     pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.Brightness, pA.lightStates.Brightness);
@@ -1066,12 +1062,12 @@ function lightBrightness(value: number|string, pA:BigAssFans_i6PlatformAccessory
     debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update Light On From lightBrightness: ' + pA.lightStates.On);
     pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
   } else {
-    if (pA.lightAutoSwitchOn) {
-      // tell homekit the light is off
-      pA.lightStates.On = false;
-      debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update Light On From lightBrightness: ' + pA.lightStates.On);
-      pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
-    }
+    // if (pA.lightAutoSwitchOn) {
+    // tell homekit the light is off
+    pA.lightStates.On = false;
+    debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update Light On From lightBrightness: ' + pA.lightStates.On);
+    pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
+    // }
   }
 }
 
