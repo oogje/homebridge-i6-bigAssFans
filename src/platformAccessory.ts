@@ -683,30 +683,35 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
 
   const rawChunk = data;  // data buffer gets modified as we go along.  rawChunk is a copy of the unmodified buffer
 
+  // we assume a property/value entry with starting byte of 0x1a will always be the one and only property/value entry in the chunk.
+
   // dealing with a protocol ambiguity in the i6 pre 2022
   // first byte is 0xc0
   // then a big-assed-number (number of remaining bytes in chunk) followed by 0x22
   // -then-
-  // (a) possibly a big-assed-number (2nd-number-of-remaining-bytes-in-chunk) followed by 0x12, the property-size, the property and values,
-  //   repeated until the 2nd-number-of-remaining-bytes-in-chunk is consumed, then a 72-byte token-like-thing starting with 0x28
+  // (a) possibly a big-assed-number (2nd-number-of-remaining-bytes-in-chunk) followed by 0x12 (or 1a?), the property-size, the property
+  //   and values, repeated until the 2nd-number-of-remaining-bytes-in-chunk is consumed, then a 72-byte token-like-thing starting with 0x28
   //   -or-
   // (b) possibly a big-assed-number (2nd-number-of-remaining-bytes-in-chunk) which is actually the the property-size, then the property and
   //   values.
   //
-  // a simple text property has a one-byte property type of '0x12', so beware of a data chunk of case (b) that begins with a simeple text
+  // a simple text property has a one-byte property type of '0x12', so beware of a data chunk of case (b) that begins with a simple text
   // property like model-type.  E.g., 0xc0, 0x12, 0x50, 0x22, 0x05, 0x12, 0x03, 0x69, 0x36, 0x28, ..., 0xc0.  I've not seen that happen yet.
 
   // case (a) i6 example:
   //  0xc0, 0x12, 0x75, 0x22, 0x2b, 0x12, 0x03, 0xb8, 0x09, 0x01, 0x12, ..., 0x28, ..., 0xc0
   // case (b) i6 example:
   //  0xc0, 0x12, 0x50, 0x22, 0x06, 0x1a, 0x04, 0x08, 0x03, 0x20, 0x10, 0x28, ..., 0xc0
+  // case (c) when there's a schedule
+  //  0xc0, 0x12, 0x7b, 0x22, 0x31, 0x1a, 0x2f, ..., 0x28, ..., 0xc0
 
   // how to determine if it's case (a) or (b)?
   // getting to the 0x22 is straightforward.
   // if case (b) should satisify some assumptions:
   //   1) the value after 0x22 is a one-byte big-assed-number because we ASS-U-ME no property/value message is larger that 255 bytes.  thus
   //      post 0x22 data length < 255.
-  //   2) the value after the one-byte big-assed-number is not 0x12 (start of property/value message) [see note above about simple text]
+  //   2) the value after the one-byte big-assed-number is not 0x12 or 0x1a (start of property/value message) [see note above about
+  //      simple text]
   //   3) the value after the 0x22 is the size of the single property/value message in the data chunk.
   //   4) that size plus remainingChunkSize + 1 (terminating 0xc0) == data.length
 
@@ -718,7 +723,7 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
   data = data.subarray(1); // remove 0xc0
 
   if (data[0] !== 0x12) {
-    log.warn('expected start of message header (0x12), got: ' + hexFormat(data[0]));
+    log.warn('expected start of message header (0x12 or 0x1a), got: ' + hexFormat(data[0]));
     debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
     return [];
   }
@@ -750,15 +755,18 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
 
   let chunkSizeSansToken:number;
 
-  if ((rawChunk.length - data.length) === (data[0] - (1 + 1)))  { // (1 + 1): 1 for the prop size, 1 for the final 0xc0
-    chunkSizeSansToken = data[0] + 2; // +1 for the 0x12 we're going to insert at the beginning, and 1 for the final oxc0
+  // data[0] is remaining chunk size
+  // data[1] is 0x1a
+  // data[2] is size of 1st (and only) property message
+  // ((data[0] - data[2]) === 2) // starting byte (0x1a) terminating byte (0xc0)
+  // (data.length == data[2] + tokenLength + 4) // +4: <chunkSizeSansToken byte> + 0x1a + data[2] byte + 0xc0
+
+  if (data.length === data[2] + tokenLength + 4)  {
+    chunkSizeSansToken = data[0] + 2; // +1 for the 0x12 we're going to insert at the beginning, and 1 for the final 0xc0
 
     // stuff a start byte (0x12) to make everything copacetic down the road
     data = Buffer.concat([Buffer.from([0x12]), data]);
-
-    // if (platformAccessory.Model !== 'i6' && platformAccessory.Model !== 'unknown model') {
     //   debugLog(platformAccessory, 'cluing', 2, 'Et tu, "' + platformAccessory.Model + '"');
-    // }
   } else {
     // accumulate remaining size (bigAssNumber)
     banArray = [];

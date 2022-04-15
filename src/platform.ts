@@ -161,7 +161,7 @@ function checkDevice(platform: BigAssFans_i6Platform, ip: string, cb) {
     timeoutIDs[ip] = setTimeout((log: Logger, ip: string, client) => {
       client.destroy();
       log.error('Fan configured with ip: ' + ip +
-          ' is not responding to our probe.  This could happen if the fan model is not i6, but for instance Haiku.');
+          ' is not responding to our probe.  This could happen if the fan model is not i6 or Haiku with firmware 3.0.0 or higher.');
     }, 30000, platform.log, ip, client);
 
   });
