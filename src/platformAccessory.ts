@@ -761,7 +761,7 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
   // ((data[0] - data[2]) === 2) // starting byte (0x1a) terminating byte (0xc0)
   // (data.length == data[2] + tokenLength + 4) // +4: <chunkSizeSansToken byte> + 0x1a + data[2] byte + 0xc0
 
-  if (data.length === data[2] + tokenLength + 4)  {
+  if (data.length === (data[2] + tokenLength + 4))  {
     if (data[1] !== 0x1a) {
       debugLog(platformAccessory, 'newcode', 1, 'sole message in a chunk is not 0x1a, but rather: ' + hexFormat(data[1]));
     }
