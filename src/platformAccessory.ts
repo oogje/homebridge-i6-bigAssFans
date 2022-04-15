@@ -762,8 +762,11 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
   // (data.length == data[2] + tokenLength + 4) // +4: <chunkSizeSansToken byte> + 0x1a + data[2] byte + 0xc0
 
   if (data.length === data[2] + tokenLength + 4)  {
-    chunkSizeSansToken = data[0] + 2; // +1 for the 0x12 we're going to insert at the beginning, and 1 for the final 0xc0
+    if (data[1] != 0x1a) {
+      debugLog(platformAccessory, 'newcode', 1, 'sole message in a chunk is not 0x1a, but rather: ' + hexFormat(data[1]));
+    }
 
+    chunkSizeSansToken = data[0] + 2; // +1 for the 0x12 we're going to insert at the beginning, and 1 for the final 0xc0
     // stuff a start byte (0x12) to make everything copacetic down the road
     data = Buffer.concat([Buffer.from([0x12]), data]);
     //   debugLog(platformAccessory, 'cluing', 2, 'Et tu, "' + platformAccessory.Model + '"');
