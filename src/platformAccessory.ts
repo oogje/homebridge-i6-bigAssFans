@@ -30,7 +30,7 @@ export class BigAssFans_i6PlatformAccessory {
   public ecoModeSwitchService!: Service;
 
   public lightStates = {
-    On: true,
+    On: false,
     Brightness: 1,  // percent
     ColorTemperature: 2200,
     homeShieldUp: false,  // used to prevent Home.app from turning light on at 100% when it's at zero percent.
@@ -321,7 +321,7 @@ export class BigAssFans_i6PlatformAccessory {
 
   async getLightOnState(): Promise<CharacteristicValue> {
     const isOn = this.lightStates.On;
-    debugLog(this, 'characteristics', 4, 'Get Characteristic Light On -> ' + isOn);
+    debugLog(this, ['newcode', 'characteristics'], [1, 4], 'Get Characteristic Light On -> ' + isOn);
     // if you need to return an error to show the device as 'Not Responding' in the Home app:
     // throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     return isOn;
@@ -351,7 +351,7 @@ export class BigAssFans_i6PlatformAccessory {
 
   async getBrightness(): Promise<CharacteristicValue> {
     const brightness = (this.lightStates.Brightness === 0 ? 1 : this.lightStates.Brightness);
-    debugLog(this, 'characteristics', 4, 'Get Characteristic Brightness -> ' + brightness);
+    debugLog(this, ['newcode', 'characteristics'], [1, 4], 'Get Characteristic Brightness -> ' + brightness);
     return brightness;
   }
 
@@ -498,7 +498,7 @@ export class BigAssFans_i6PlatformAccessory {
 
   async getFanAutoSwitchOnState(): Promise<CharacteristicValue> {
     const isOn = this.fanAutoSwitchOn;
-    debugLog(this, 'characteristics', 3, 'Get Characteristic Fan Auto Switch On -> ' + isOn);
+    debugLog(this, ['newcode', 'characteristics'], [1, 3], 'Get Characteristic Fan Auto Switch On -> ' + isOn);
     return isOn;
   }
 
@@ -649,21 +649,21 @@ function onData(platformAccessory: BigAssFans_i6PlatformAccessory, data: Buffer)
   }
   debugLog(platformAccessory, 'network', 11, 'raw (unstuffed) data: ' + hexFormat(unstuff(data, platformAccessory)));
 
-  let processedMessageArray:string[][];
-  // parse each chunk and issue any interesting updates to homekit.
+  let messageArray:string[][];
   for (let i = 0; i < numChunks; i++) {
-    processedMessageArray = preProcess(platformAccessory, unstuff(chunks[i], platformAccessory));
+    messageArray = preProcess(platformAccessory, unstuff(chunks[i], platformAccessory));
 
-    processedMessageArray.sort(sortFunction);
-    for (let j = 0; j < processedMessageArray.length; j++) {
-      debugLog(platformAccessory, 'newcode', 10, processedMessageArray[j][0]);
+    messageArray.sort(sortFunction);
+    for (let j = 0; j < messageArray.length; j++) {
+      debugLog(platformAccessory, 'newcode', 10, 'handle: ' + messageArray[j][0]);
+      debugLog(platformAccessory, 'newcode', 12, 'handle: ' + messageArray[j]);
 
-      const propertyHandlerFunction = platformAccessory.propertiesTable[processedMessageArray[j][0]][PROPERTYHANDLERFUNCTION];
+      const propertyHandlerFunction = platformAccessory.propertiesTable[messageArray[j][0]][PROPERTYHANDLERFUNCTION];
       if (propertyHandlerFunction === undefined) {
-        platformAccessory.platform.log.warn('undefined handler for:', processedMessageArray[j][0]);
+        platformAccessory.platform.log.warn('undefined handler for:', messageArray[j][0]);
         continue;
       }
-      propertyHandlerFunction(processedMessageArray[j][1], platformAccessory, processedMessageArray[j][0]);
+      propertyHandlerFunction(messageArray[j][1], platformAccessory, messageArray[j][0]);
     }
   }
 }
@@ -683,27 +683,30 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
 
   const rawChunk = data;  // data buffer gets modified as we go along.  rawChunk is a copy of the unmodified buffer
 
-  // we assume a property/value entry with starting byte of 0x1a will always be the one and only property/value entry in the chunk.
-
-  // dealing with a protocol ambiguity in the i6 pre 2022
+  // dealing with a protocol ambiguity (or my ignorance)
   // first byte is 0xc0
   // then a big-assed-number (number of remaining bytes in chunk) followed by 0x22
   // -then-
-  // (a) possibly a big-assed-number (2nd-number-of-remaining-bytes-in-chunk) followed by 0x12 (or 1a?), the property-size, the property
-  //   and values, repeated until the 2nd-number-of-remaining-bytes-in-chunk is consumed, then a 72-byte token-like-thing starting with 0x28
-  //   -or-
-  // (b) possibly a big-assed-number (2nd-number-of-remaining-bytes-in-chunk) which is actually the the property-size, then the property and
-  //   values.
+  // (a) possibly a big-assed-number (2nd-number-of-remaining-bytes-in-chunk) followed by 0x12 (or 1a?), the property+value-size,
+  //   the property and values, repeated until the 2nd-number-of-remaining-bytes-in-chunk is consumed, then a 72-byte token-like-thing
+  //   starting with 0x28
+  //
+  // -or-
+  //
+  // (b) possibly a big-assed-number (2nd-number-of-remaining-bytes-in-chunk) which is actually the the property+value-size, then the
+  //   property and values.
   //
   // a simple text property has a one-byte property type of '0x12', so beware of a data chunk of case (b) that begins with a simple text
   // property like model-type.  E.g., 0xc0, 0x12, 0x50, 0x22, 0x05, 0x12, 0x03, 0x69, 0x36, 0x28, ..., 0xc0.  I've not seen that happen yet.
 
   // case (a) i6 example:
   //  0xc0, 0x12, 0x75, 0x22, 0x2b, 0x12, 0x03, 0xb8, 0x09, 0x01, 0x12, ..., 0x28, ..., 0xc0
-  // case (b) i6 example:
+  // case (b) i6 examples:
   //  0xc0, 0x12, 0x50, 0x22, 0x06, 0x1a, 0x04, 0x08, 0x03, 0x20, 0x10, 0x28, ..., 0xc0
-  // case (c) when there's a schedule
   //  0xc0, 0x12, 0x7b, 0x22, 0x31, 0x1a, 0x2f, ..., 0x28, ..., 0xc0
+  //  0xc0, 0x12, 0x4f, 0x22, 0x05, 0x12, 0x03, 0xda, 0x0a, 0x00, 0x28, ..., 0xc0
+
+  // case (c) when there's a schedule
 
   // how to determine if it's case (a) or (b)?
   // getting to the 0x22 is straightforward.
@@ -756,14 +759,27 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
   let chunkSizeSansToken:number;
 
   // data[0] is remaining chunk size
-  // data[1] is 0x1a
+  // data[1] is 0x12 or 0x1a
   // data[2] is size of 1st (and only) property message
   // ((data[0] - data[2]) === 2) // starting byte (0x1a) terminating byte (0xc0)
   // (data.length == data[2] + tokenLength + 4) // +4: <chunkSizeSansToken byte> + 0x1a + data[2] byte + 0xc0
 
+  // if (remainingChunkSize === (data[2] + 2) + tokenLength + 2) {
+  //   debugLog(platformAccessory, 'newcode', 1, 'solo!')
+  // }
+
   if (data.length === (data[2] + tokenLength + 4))  {
     if (data[1] !== 0x1a) {
-      debugLog(platformAccessory, 'newcode', 1, 'sole message in a chunk is not 0x1a, but rather: ' + hexFormat(data[1]));
+      if (data[1] === 0x12) {
+        // debugLog(platformAccessory, 'newcode', 1, 'data[0]: ' + data[0])
+        debugLog(platformAccessory, 'newcode', 1, 'ignoring brief message: ' + hexFormat(data.subarray(1, data[0]+1)));
+        data = data.subarray(data[0]+1);
+      }
+      debugLog(platformAccessory, 'newcode', 1, 'sole message in a chunk is not 0x1a or 0x12, but rather: ' + hexFormat(data[1]));
+      // debugLog(platformAccessory, 'newcode', 1, '(' + remainingChunkSize + ' !== (' + data[2] + ' + 2) + ' + tokenLength)
+      // debugLog(platformAccessory, 'newcode', 1,
+      //  '(' + data.length + ' === (' + data[2] + ' + ' + tokenLength + ' + 4): ' + (data.length === (data[2] + tokenLength + 4)));
+
     }
 
     chunkSizeSansToken = data[0] + 2; // +1 for the 0x12 we're going to insert at the beginning, and 1 for the final 0xc0
@@ -798,7 +814,7 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
       debugLog(platformAccessory,
         'network', 1, 'chunkSizeSansToken: ' + assumedChunkSize + ', not what we expected with data length: ' + data.length);
       debugLog(platformAccessory, 'network', 1, 'OldProtocolFlag: ' + platformAccessory.OldProtocolFlag);
-      debugLog(platformAccessory, 'network', 1, 'rawChunk: ' + hexFormat(rawChunk));
+      debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
 
       return [];
     }
@@ -1169,6 +1185,8 @@ function getPropertiesArray():typeof properties {
   return properties;
 }
 
+
+
 /**
 * property handler functions
 */
@@ -1182,19 +1200,19 @@ function capabilities(value: string, pA:BigAssFans_i6PlatformAccessory) {
   // Klidec
   // 0x12, 0x11, 0x8a, 0x01, 0x0e, 0x08, 0x01, 0x18, 0x01, 0x20, 0x01, 0x38, 0x01, 0x48, 0x01, 0x50, 0x01, 0x70, 0x01,
   if (value.indexOf('0x20, 0x01') === -1) {
-    debugLog(pA, 'newcode', 1, 'no light detected');
+    // debugLog(pA, 'newcode', 1, 'no light detected');
     const service = pA.accessory.getService(pA.platform.Service.Lightbulb);
     if (service) {
       pA.accessory.removeService(service);
     }
   } else {
-    debugLog(pA, 'newcode', 1, 'light detected');
+    // debugLog(pA, 'newcode', 1, 'light detected');
   }
 }
 
 function getModel(value: string, pA:BigAssFans_i6PlatformAccessory) {
   pA.Model = value;
-  debugLog(pA, 'newcode', 5, 'model: ' + pA.Model);
+  debugLog(pA, 'newcode', 1, 'model: ' + pA.Model + ' (' + hexFormat(Buffer.from(value, 'utf8')) + ')');
 
   pA.accessory.getService(pA.platform.Service.AccessoryInformation)!
     .setCharacteristic(pA.platform.Characteristic.Model, pA.Model);
@@ -1303,7 +1321,7 @@ function lightOnState(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
 
   pA.lightAutoSwitchOn = (value === 2) ? true: false;
   if (pA.showLightAutoSwitch) {
-    debugLog(pA, 'characteristics', 1, 'update light auto switch on: ' + pA.lightAutoSwitchOn);
+    debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update light auto switch on: ' + pA.lightAutoSwitchOn);
     pA.lightAutoSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightAutoSwitchOn);
   }
 
@@ -1459,8 +1477,8 @@ function mysteryCode(value: string, pA:BigAssFans_i6PlatformAccessory, code: str
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function testValue(bytes:Buffer): number|string {
-  hbLog.debug('testValue(' + hexFormat(bytes) + ')' + ' returns string with length: ' + bytes.toString.length.toString());
-  return(bytes.toString());
+  hbLog.debug('testValue(' + hexFormat(bytes) + ')');
+  return('test');
 }
 
 function onOffAutoValue(bytes:Buffer, pA:BigAssFans_i6PlatformAccessory): number|string|undefined {
