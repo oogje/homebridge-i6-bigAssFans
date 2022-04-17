@@ -757,6 +757,7 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
   const tokenLength = platformAccessory.OldProtocolFlag ? 72 : 0;
 
   let chunkSizeSansToken:number;
+  // let ignoredBytes = 0;
 
   // data[0] is remaining chunk size
   // data[1] is 0x12 or 0x1a
@@ -768,12 +769,15 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
   //   debugLog(platformAccessory, 'newcode', 1, 'solo!')
   // }
 
-  if (data.length === (data[2] + tokenLength + 4))  {
+  if (data.length === (data[2] + tokenLength + 4))  { // this is the sole message in the chunk
     if (data[1] !== 0x1a) {
-      if (data[1] === 0x12) {
-        // debugLog(platformAccessory, 'newcode', 1, 'data[0]: ' + data[0])
-        debugLog(platformAccessory, 'newcode', 1, 'ignoring brief message: ' + hexFormat(data.subarray(1, data[0]+1)));
+      if (data[1] === 0x12) { // we're going to skip the sole message, therefore we're skipping the entire chunk
+        debugLog(platformAccessory, 'newcode', 1, 'ignoring chunk with sole message: ' + hexFormat(data.subarray(1, data[0]+1)));
+        /*
+        ignoredBytes = data[0]+1;
         data = data.subarray(data[0]+1);
+        return [];
+        */
       }
       debugLog(platformAccessory, 'newcode', 1, 'sole message in a chunk is not 0x1a or 0x12, but rather: ' + hexFormat(data[1]));
       // debugLog(platformAccessory, 'newcode', 1, '(' + remainingChunkSize + ' !== (' + data[2] + ' + 2) + ' + tokenLength)
@@ -965,9 +969,6 @@ function processFanMessage(platformAccessory: BigAssFans_i6PlatformAccessory, da
     // stuff a start byte (0x12) to make everything copacetic down the road
     data = Buffer.concat([Buffer.from([0x12]), data]);
 
-    // if (platformAccessory.Model !== 'i6' && platformAccessory.Model !== 'unknown model') {
-    //   debugLog(platformAccessory, 'cluing', 2, 'Et tu, "' + platformAccessory.Model + '"');
-    // }
   } else {
     // accumulate remaining size (bigAssNumber)
     banArray = [];
