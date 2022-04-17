@@ -10,8 +10,6 @@ let hbLog: Logger;
 
 const MAXFANSPEED = 7;
 
-const MAXDEBUGLEVEL = 99;
-
 // property table columns
 const DECODEVALUEFUNCTION = 0;
 const PROPERTYHANDLERFUNCTION = 1;
@@ -99,6 +97,7 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     // defaults and enumeration of debugging keys
+    this.debugLevels['light'] = 0;
     this.debugLevels['cluing'] = 0;
     this.debugLevels['network'] = 0;
     this.debugLevels['newcode'] = 0;
@@ -107,24 +106,6 @@ export class BigAssFans_i6PlatformAccessory {
     this.debugLevels['noopcodes'] = 0;
     this.debugLevels['characteristics'] = 0;
 
-    // deprecating megaDebugLevel - but will interpret it for the time being
-    if (accessory.context.device.megaDebugLevel !== undefined) {
-      hbLog.warn('"megaDebugLevel" in configuration is deprecated.');
-      if (accessory.context.device.megaDebugLevel.toLowerCase() === 'max' ||
-      (accessory.context.device.megaDebugLevel as number) > MAXDEBUGLEVEL) {
-        this.debugLevel = MAXDEBUGLEVEL;
-      } else {
-        this.debugLevel = this.accessory.context.device.megaDebugLevel as number;
-      }
-      debugLog(this, 'progress', 2, 'megaDebugLevel:' + (this.accessory.context.device.megaDebugLevel as number));
-      for (const index in this.debugLevels) {
-        this.debugLevels[index] = this.debugLevel;
-      }
-    // } else {
-    //   this.debugLevel = 3;
-    }
-
-    // this is the replacement debug logging thing
     if (this.accessory.context.device.debugLevels !== undefined) {
       for (const debugEntry of this.accessory.context.device.debugLevels) {
         const entry:(string | number)[] = debugEntry as (string | number)[];
@@ -312,7 +293,7 @@ export class BigAssFans_i6PlatformAccessory {
     debugLog(this, 'characteristics',  1, 'Set Characteristic Light On -> ' + value);
 
     if (this.lightStates.On && (value as boolean)) {
-      debugLog(this, 'newcode', 1, 'setLightOnState: light is already on, ignore this');
+      debugLog(this, 'light', 1, 'setLightOnState: light is already on, ignore this');
     } else {
       this.lightStates.On = value as boolean;
       clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, (this.lightStates.On ? 0x01 : 0x00), 0xc0])), this);
@@ -321,7 +302,7 @@ export class BigAssFans_i6PlatformAccessory {
 
   async getLightOnState(): Promise<CharacteristicValue> {
     const isOn = this.lightStates.On;
-    debugLog(this, ['newcode', 'characteristics'], [1, 4], 'Get Characteristic Light On -> ' + isOn);
+    debugLog(this, ['light', 'characteristics'], [1, 4], 'Get Characteristic Light On -> ' + isOn);
     // if you need to return an error to show the device as 'Not Responding' in the Home app:
     // throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     return isOn;
@@ -351,17 +332,12 @@ export class BigAssFans_i6PlatformAccessory {
 
   async getBrightness(): Promise<CharacteristicValue> {
     const brightness = (this.lightStates.Brightness === 0 ? 1 : this.lightStates.Brightness);
-    debugLog(this, ['newcode', 'characteristics'], [1, 4], 'Get Characteristic Brightness -> ' + brightness);
+    debugLog(this, ['light', 'characteristics'], [1, 4], 'Get Characteristic Brightness -> ' + brightness);
     return brightness;
   }
 
   async getCurrentTemperature(): Promise<CharacteristicValue> {
-    // const temperature = (this.CurrentTemperature - 32) / 1.8; // convert to celsius
     const temperature = this.CurrentTemperature;
-    if (temperature < -270 || temperature > 100) {
-      this.platform.log.warn('temperature out of bounds: ', temperature);
-      return 0;
-    }
     debugLog(this, 'characteristics', 4, 'Get Characteristic CurrentTemperature -> ' + temperature);
     return temperature;
   }
@@ -410,7 +386,7 @@ export class BigAssFans_i6PlatformAccessory {
       debugLog(this, 'characteristics', 3, 'Set Characteristic RotationSpeed -> ' + (value as number) + '%');
       this.fanStates.RotationSpeed = Math.round(((value as number) / 100) * MAXFANSPEED);
       if (this.fanStates.RotationSpeed > MAXFANSPEED) {
-        this.platform.log.warn('fan speed > ' + MAXFANSPEED + ': ' + this.fanStates.RotationSpeed + ', setting to ' + MAXFANSPEED);
+        hbLog.warn('fan speed > ' + MAXFANSPEED + ': ' + this.fanStates.RotationSpeed + ', setting to ' + MAXFANSPEED);
         this.fanStates.RotationSpeed = MAXFANSPEED;
       }
       b = Buffer.from(ONEBYTEHEADER.concat([0xf0, 0x02, this.fanStates.RotationSpeed, 0xc0]));
@@ -498,7 +474,7 @@ export class BigAssFans_i6PlatformAccessory {
 
   async getFanAutoSwitchOnState(): Promise<CharacteristicValue> {
     const isOn = this.fanAutoSwitchOn;
-    debugLog(this, ['newcode', 'characteristics'], [1, 3], 'Get Characteristic Fan Auto Switch On -> ' + isOn);
+    debugLog(this, 'characteristics', 3, 'Get Characteristic Fan Auto Switch On -> ' + isOn);
     return isOn;
   }
 
@@ -567,23 +543,23 @@ function networkSetup(platformAccessory: BigAssFans_i6PlatformAccessory) {
 
   platformAccessory.client.on('error', errHandler = (err) => {
     if (err.code === 'ECONNRESET') {
-      platformAccessory.platform.log.warn('Fan network connection reset [ECONNRESET]. Attempting reconnect in 2 seconds.');
+      hbLog.warn('Fan network connection reset [ECONNRESET]. Attempting reconnect in 2 seconds.');
     } else if (err.code === 'EPIPE') {
-      platformAccessory.platform.log.warn('Fan network connection broke [EPIPE]. Attempting reconnect in 2 seconds.');
+      hbLog.warn('Fan network connection broke [EPIPE]. Attempting reconnect in 2 seconds.');
     } else if (err.code === 'ETIMEDOUT') {
-      platformAccessory.platform.log.warn('Fan connection timed out [ETIMEDOUT].  '  +
+      hbLog.warn('Fan connection timed out [ETIMEDOUT].  '  +
         'Check that your fan has power and the correct IP is in json.config.');
     } else if (err.code === 'ECONNREFUSED') {
-      platformAccessory.platform.log.warn('Fan connection refused [ECONNREFUSED].  '  +
+      hbLog.warn('Fan connection refused [ECONNREFUSED].  '  +
           'Check that the correct IP is in json.config.');
     } else {
-      platformAccessory.platform.log.warn('Unhandled network error: ' + err.code + '.  Attempting reconnect in 2 seconds.');
+      hbLog.warn('Unhandled network error: ' + err.code + '.  Attempting reconnect in 2 seconds.');
     }
     platformAccessory.client = undefined;
     setTimeout(() => {
       // already did this one or more times, don't need to send initilization message
       platformAccessory.client = net.connect(31415, platformAccessory.IP, () => {
-        platformAccessory.platform.log.info('reconnected!');
+        hbLog.info('reconnected!');
       });
       platformAccessory.client.on('error', (err) => {
         errHandler(err);
@@ -598,7 +574,8 @@ function networkSetup(platformAccessory: BigAssFans_i6PlatformAccessory) {
   *  separate the data into chunks as required and feed them to parseFanMessage() one at a time.
   */
   platformAccessory.client.on('data', (data: Buffer) => {
-    if (platformAccessory.OldProtocolFlag === undefined) {
+    if (platformAccessory.OldProtocolFlag === undefined ||
+        (platformAccessory.OldProtocolFlag === false && platformAccessory.Model === 'i6')) { // try, try, if you don't succeed
       platformAccessory.OldProtocolFlag = ((data.length >= 73) && (data[data.length - 73] === 0x28));
       const msgString = 'assuming ' + (platformAccessory.OldProtocolFlag ? 'old' : 'new') + ' protocol';
       debugLog(platformAccessory, 'network', 1, msgString);
@@ -641,7 +618,7 @@ function onData(platformAccessory: BigAssFans_i6PlatformAccessory, data: Buffer)
       } else {
         endIndex = i;
         chunks[numChunks] = data.subarray(startIndex, endIndex+1);
-        // this.platform.log.debug('start: ' + startIndex + ', end: ' + endIndex + ', length: ' + chunks[numChunks].length);
+        //  hbLog.debug('start: ' + startIndex + ', end: ' + endIndex + ', length: ' + chunks[numChunks].length);
         numChunks++;
         startIndex = -1;
       }
@@ -660,7 +637,7 @@ function onData(platformAccessory: BigAssFans_i6PlatformAccessory, data: Buffer)
 
       const propertyHandlerFunction = platformAccessory.propertiesTable[messageArray[j][0]][PROPERTYHANDLERFUNCTION];
       if (propertyHandlerFunction === undefined) {
-        platformAccessory.platform.log.warn('undefined handler for:', messageArray[j][0]);
+        hbLog.warn('undefined handler for:', messageArray[j][0]);
         continue;
       }
       propertyHandlerFunction(messageArray[j][1], platformAccessory, messageArray[j][0]);
@@ -677,7 +654,6 @@ function sortFunction(a, b) {
 }
 
 function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typeof Buffer):string[][] {
-  const log = platformAccessory.platform.log;
   let len = 0;
   let propertyFields: typeof Buffer;
 
@@ -719,14 +695,14 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
   //   4) that size plus remainingChunkSize + 1 (terminating 0xc0) == data.length
 
   if (data[0] !== 0xc0) {
-    log.warn('expected start of message chunk (0x0c), got: ' + hexFormat(data[0]));
+    hbLog.warn('expected start of message chunk (0x0c), got: ' + hexFormat(data[0]));
     debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
     return [];
   }
   data = data.subarray(1); // remove 0xc0
 
   if (data[0] !== 0x12) {
-    log.warn('expected start of message header (0x12 or 0x1a), got: ' + hexFormat(data[0]));
+    hbLog.warn('expected start of message header (0x12 or 0x1a), got: ' + hexFormat(data[0]));
     debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
     return [];
   }
@@ -741,12 +717,12 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
   const remainingChunkSize = bigAssNumber(Buffer.from(banArray));
 
   if (data.length !== (remainingChunkSize + 1)) { // add in the 0xc0
-    log.warn('this is not the chunk size we\'re looking for: ' + remainingChunkSize + ', actual: ' + data.length);
+    hbLog.warn('this is not the chunk size we\'re looking for: ' + remainingChunkSize + ', actual: ' + data.length);
     debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
     return [];
   }
   if (data.length === 0 || data[0] !== 0x22) {
-    log.warn('not good.  apparently we ran off the end of the data buffer');
+    hbLog.warn('not good.  apparently we ran off the end of the data buffer');
     debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
     return [];
   }
@@ -772,18 +748,10 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
   if (data.length === (data[2] + tokenLength + 4))  { // this is the sole message in the chunk
     if (data[1] !== 0x1a) {
       if (data[1] === 0x12) { // we're going to skip the sole message, therefore we're skipping the entire chunk
-        debugLog(platformAccessory, 'newcode', 1, 'ignoring chunk with sole message: ' + hexFormat(data.subarray(1, data[0]+1)));
-        /*
-        ignoredBytes = data[0]+1;
-        data = data.subarray(data[0]+1);
+        debugLogOnce(platformAccessory, 'redflags', 2, 'ignoring chunk with sole message: ' + hexFormat(data.subarray(1, data[0]+1)));
         return [];
-        */
       }
-      debugLog(platformAccessory, 'newcode', 1, 'sole message in a chunk is not 0x1a or 0x12, but rather: ' + hexFormat(data[1]));
-      // debugLog(platformAccessory, 'newcode', 1, '(' + remainingChunkSize + ' !== (' + data[2] + ' + 2) + ' + tokenLength)
-      // debugLog(platformAccessory, 'newcode', 1,
-      //  '(' + data.length + ' === (' + data[2] + ' + ' + tokenLength + ' + 4): ' + (data.length === (data[2] + tokenLength + 4)));
-
+      debugLog(platformAccessory, 'redflags', 1, 'sole message in a chunk is not 0x1a or 0x12, but rather: ' + hexFormat(data[1]));
     }
 
     chunkSizeSansToken = data[0] + 2; // +1 for the 0x12 we're going to insert at the beginning, and 1 for the final 0xc0
@@ -806,19 +774,17 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
 
   if (data.length !== assumedChunkSize) {
     if (data.length === (assumedChunkSize + 72)) {
-      debugLog(platformAccessory, 'network', 1, 'would be chunkSizeSansToken warning averted');
+      debugLog(platformAccessory, 'redflags', 1, 'would be chunkSizeSansToken warning averted');
       if (platformAccessory.OldProtocolFlag === undefined) {
-        debugLog(platformAccessory, 'network', 1, 'platformAccessory.OldProtocolFlag === undefined');
+        debugLog(platformAccessory, 'redflags', 1, 'platformAccessory.OldProtocolFlag === undefined');
       } else {
-        debugLog(platformAccessory, 'network', 1, 'OldProtocolFlag: ' + platformAccessory.OldProtocolFlag);
+        debugLog(platformAccessory, 'redflags', 1, 'OldProtocolFlag: ' + platformAccessory.OldProtocolFlag);
       }
     } else {
       // repeating the log.warn text because warnings and debug messages are not displayed in synchrony
-      log.warn('chunkSizeSansToken: ' + assumedChunkSize + ', not what we expected with data length: ' + data.length);
-      debugLog(platformAccessory,
-        'network', 1, 'chunkSizeSansToken: ' + assumedChunkSize + ', not what we expected with data length: ' + data.length);
-      debugLog(platformAccessory, 'network', 1, 'OldProtocolFlag: ' + platformAccessory.OldProtocolFlag);
-      debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
+      hbLog.warn('chunkSizeSansToken: ' + assumedChunkSize + ', not what we expected with data length: ' + data.length);
+      debugLog(platformAccessory, 'redflags', 1, 'OldProtocolFlag: ' + platformAccessory.OldProtocolFlag);
+      debugLog(platformAccessory, 'redflags', 3, 'rawChunk: ' + hexFormat(rawChunk));
 
       return [];
     }
@@ -834,12 +800,12 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
       if (data.length === 73) {
         return processedMessageArray;
       } else {
-        debugLog(platformAccessory, 'network', 3, 'surprise! token length was: ' + data.length);
+        debugLog(platformAccessory, 'redflags', 3, 'surprise! token length was: ' + data.length);
       }
     }
     if (data[0] !== 0x12) {
-      platformAccessory.platform.log.warn('expected 0x12, got: ', hexFormat(data.subarray(0, 1)));
-      debugLog(platformAccessory, 'network', 3, 'unexpected byte in chunk:  ' + hexFormat(data) + ' from: ' + hexFormat(rawChunk));
+      hbLog.warn('expected 0x12, got: ', hexFormat(data.subarray(0, 1)));
+      debugLog(platformAccessory, 'redflags', 3, 'unexpected byte in chunk:  ' + hexFormat(data) + ' from: ' + hexFormat(rawChunk));
       return processedMessageArray;
     }
     data = data.subarray(1);  // remove the 'start of header' (0x12) from the remaining data
@@ -859,17 +825,21 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
     const propertyValueField = propertyFields.subarray(hdrsize);
 
     if (platformAccessory.propertiesTable[propertyCodeString] === undefined) {
-      platformAccessory.platform.log.warn('propertiesTable[' + propertyCodeString + '] === undefined');
+      hbLog.warn('propertiesTable[' + propertyCodeString + '] === undefined');
       continue;
     }
 
     const decodeValueFunction = platformAccessory.propertiesTable[propertyCodeString][DECODEVALUEFUNCTION];
     if (decodeValueFunction === undefined) {
-      platformAccessory.platform.log.warn('No value decoding function for: ', propertyCodeString);
+      hbLog.warn('No value decoding function for: ', propertyCodeString);
     }
+
+    // the propertiesTable declaration for the decode value functions to have platform accessory and string arguments.
+    // we pass the arguments whether or not a given function requires them just in case we want to, for example, add a debugLog call
+    // in a given function.
     const decodedValue = decodeValueFunction(propertyValueField, platformAccessory, 'noop');
     if (decodedValue === undefined) {
-      platformAccessory.platform.log.warn('Could not decode value for: ', propertyCodeString);
+      hbLog.warn('Could not decode value for: ', propertyCodeString);
       continue;
     }
 
@@ -878,7 +848,7 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
 
     const propertyHandlerFunction = platformAccessory.propertiesTable[propertyCodeString][PROPERTYHANDLERFUNCTION];
     if (propertyHandlerFunction === undefined) {
-      platformAccessory.platform.log.warn('undefined handler for:', propertyCodeString);
+      hbLog.warn('undefined handler for:', propertyCodeString);
       continue;
     }
 
@@ -886,182 +856,6 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
     processedMessageArray.push([propertyCodeString, decodedValue]);
   }
   return processedMessageArray;
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function processFanMessage(platformAccessory: BigAssFans_i6PlatformAccessory, data: typeof Buffer) {
-  const log = platformAccessory.platform.log;
-  let len = 0;
-  let propertyFields: typeof Buffer;
-
-  const rawChunk = data;  // data buffer gets modified as we go along.  rawChunk is a copy of the unmodified buffer
-
-  // dealing with a protocol ambiguity in the i6 pre 2022
-  // first byte is 0xc0
-  // then a big-assed-number (number of remaining bytes in chunk) followed by 0x22
-  // -then-
-  // (a) possibly a big-assed-number (2nd-number-of-remaining-bytes-in-chunk) followed by 0x12, the property-size, the property and values,
-  //   repeated until the 2nd-number-of-remaining-bytes-in-chunk is consumed, then a 72-byte token-like-thing starting with 0x28
-  //   -or-
-  // (b) possibly a big-assed-number (2nd-number-of-remaining-bytes-in-chunk) which is actually the the property-size, then the property and
-  //   values.
-  //
-  // a simple text property has a one-byte property type of '0x12', so beware of a data chunk of case (b) that begins with a simeple text
-  // property like model-type.  E.g., 0xc0, 0x12, 0x50, 0x22, 0x05, 0x12, 0x03, 0x69, 0x36, 0x28, ..., 0xc0.  I've not seen that happen yet.
-
-  // case (a) i6 example:
-  //  0xc0, 0x12, 0x75, 0x22, 0x2b, 0x12, 0x03, 0xb8, 0x09, 0x01, 0x12, ..., 0x28, ..., 0xc0
-  // case (b) i6 example:
-  //  0xc0, 0x12, 0x50, 0x22, 0x06, 0x1a, 0x04, 0x08, 0x03, 0x20, 0x10, 0x28, ..., 0xc0
-
-  // how to determine if it's case (a) or (b)?
-  // getting to the 0x22 is straightforward.
-  // if case (b) should satisify some assumptions:
-  //   1) the value after 0x22 is a one-byte big-assed-number because we ASS-U-ME no property/value message is larger that 255 bytes.  thus
-  //      post 0x22 data length < 255.
-  //   2) the value after the one-byte big-assed-number is not 0x12 (start of property/value message) [see note above about simple text]
-  //   3) the value after the 0x22 is the size of the single property/value message in the data chunk.
-  //   4) that size plus remainingChunkSize + 1 (terminating 0xc0) == data.length
-
-  if (data[0] !== 0xc0) {
-    log.warn('expected start of message chunk (0x0c), got: ' + hexFormat(data[0]));
-    debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
-    return;
-  }
-  data = data.subarray(1); // remove 0xc0
-
-  if (data[0] !== 0x12) {
-    log.warn('expected start of message header (0x12), got: ' + hexFormat(data[0]));
-    debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
-    return;
-  }
-  data = data.subarray(1); // remove 0x12
-
-  // accumulate remaining size (bigAssNumber)
-  let banArray:number[] = [];
-  while (data.length > 0 && data[0] !== 0x22) { // field separator
-    banArray.push(data[0]);
-    data = data.subarray(1); // remove the byte we just consumed
-  }
-  const remainingChunkSize = bigAssNumber(Buffer.from(banArray));
-
-  if (data.length !== (remainingChunkSize + 1)) { // add in the 0xc0
-    log.warn('this is not the chunk size we\'re looking for: ' + remainingChunkSize + ', actual: ' + data.length);
-    debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
-    return;
-  }
-  if (data.length === 0 || data[0] !== 0x22) {
-    log.warn('not good.  apparently we ran off the end of the data buffer');
-    debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
-    return;
-  }
-  data = data.subarray(1); // remove the field separator (0x22)
-
-  // if it's the new (circa 4/4/2022) Haiku firmware then the mystery (token?) data at the end of the chunk isn't present
-
-  const tokenLength = platformAccessory.OldProtocolFlag ? 72 : 0;
-
-  let chunkSizeSansToken:number;
-
-  if ((rawChunk.length - data.length) === (data[0] - (1 + 1)))  { // (1 + 1): 1 for the prop size, 1 for the final 0xc0
-    chunkSizeSansToken = data[0] + 2; // +1 for the 0x12 we're going to insert at the beginning, and 1 for the final oxc0
-
-    // stuff a start byte (0x12) to make everything copacetic down the road
-    data = Buffer.concat([Buffer.from([0x12]), data]);
-
-  } else {
-    // accumulate remaining size (bigAssNumber)
-    banArray = [];
-    while (data.length > 0 && data[0] !== 0x12) {  // apparently 0x12 can not be part of this bigAssNumber?
-      banArray.push(data[0]);
-      data = data.subarray(1); // remove the byte we just consumed
-    }
-    chunkSizeSansToken = bigAssNumber(Buffer.from(banArray));
-  }
-
-  const assumedChunkSize = chunkSizeSansToken + tokenLength + 1; // the "+ 1" is for the terminating 0xc0
-
-  // this assertion about the remaining data length may be entirely unnecessary
-
-  if (data.length !== assumedChunkSize) {
-    if (data.length === (assumedChunkSize + 72)) {
-      debugLog(platformAccessory, 'network', 1, 'would be chunkSizeSansToken warning averted');
-      if (platformAccessory.OldProtocolFlag === undefined) {
-        debugLog(platformAccessory, 'network', 1, 'platformAccessory.OldProtocolFlag === undefined');
-      } else {
-        debugLog(platformAccessory, 'network', 1, 'OldProtocolFlag: ' + platformAccessory.OldProtocolFlag);
-      }
-    } else {
-      // repeating the log.warn text because warnings and debug messages are not displayed in synchrony
-      log.warn('chunkSizeSansToken: ' + assumedChunkSize + ', not what we expected with data length: ' + data.length);
-      debugLog(platformAccessory,
-        'network', 1, 'chunkSizeSansToken: ' + assumedChunkSize + ', not what we expected with data length: ' + data.length);
-      debugLog(platformAccessory, 'network', 1, 'OldProtocolFlag: ' + platformAccessory.OldProtocolFlag);
-      debugLog(platformAccessory, 'network', 1, 'rawChunk: ' + hexFormat(rawChunk));
-
-      return;
-    }
-  }
-
-  /**
-  * pick out the property code and send it to the decode function to get the value from its
-  * coded field.  Then call the property's handler function to act on the message's contents (or not.)
-  */
-  while (data[0] !== 0xc0) {
-    if (data[0] === 0x28) { // 0x28 is the start of what looks like a token 72 bytes long followed by 0xc0 end of chunk.
-      if (data.length === 73) {
-        return;
-      } else {
-        debugLog(platformAccessory, 'network', 3, 'surprise! token length was: ' + data.length);
-      }
-    }
-    if (data[0] !== 0x12) {
-      platformAccessory.platform.log.warn('expected 0x12, got: ', hexFormat(data.subarray(0, 1)));
-      debugLog(platformAccessory, 'network', 3, 'unexpected byte in chunk:  ' + hexFormat(data) + ' from: ' + hexFormat(rawChunk));
-      return;
-    }
-    data = data.subarray(1);  // remove the 'start of header' (0x12) from the remaining data
-
-    len = data[0];
-    data = data.subarray(1);  // remove the 'length' byte from the remaining data
-
-    propertyFields = data.subarray(0, len); // this is the message - property code and value
-    data = data.subarray(len);  // remove the message from the remaining data
-
-    let hdrsize = 2; // most property headers are two bytes
-    if (platformAccessory.oneByteHeaders.includes(propertyFields[0])) {
-      hdrsize = 1;
-    }
-
-    const propertyCodeString = hexFormat(propertyFields.subarray(0, hdrsize));
-    const propertyValueField = propertyFields.subarray(hdrsize);
-
-    if (platformAccessory.propertiesTable[propertyCodeString] === undefined) {
-      platformAccessory.platform.log.warn('propertiesTable[' + propertyCodeString + '] === undefined');
-      continue;
-    }
-
-    const decodeValueFunction = platformAccessory.propertiesTable[propertyCodeString][DECODEVALUEFUNCTION];
-    if (decodeValueFunction === undefined) {
-      platformAccessory.platform.log.warn('No value decoding function for: ', propertyCodeString);
-    }
-    const decodedValue = decodeValueFunction(propertyValueField, platformAccessory, 'noop');
-    if (decodedValue === undefined) {
-      platformAccessory.platform.log.warn('Could not decode value for: ', propertyCodeString);
-      continue;
-    }
-
-    // some unknown codes might be under surveillance - check if this is one of them?
-    codeWatch(propertyCodeString, decodedValue, propertyValueField, platformAccessory);
-
-    const propertyHandlerFunction = platformAccessory.propertiesTable[propertyCodeString][PROPERTYHANDLERFUNCTION];
-    if (propertyHandlerFunction === undefined) {
-      platformAccessory.platform.log.warn('undefined handler for:', propertyCodeString);
-      continue;
-    }
-
-    propertyHandlerFunction(decodedValue, platformAccessory, propertyCodeString);
-  }
 }
 
 // Property Table
@@ -1201,29 +995,37 @@ function capabilities(value: string, pA:BigAssFans_i6PlatformAccessory) {
   // Klidec
   // 0x12, 0x11, 0x8a, 0x01, 0x0e, 0x08, 0x01, 0x18, 0x01, 0x20, 0x01, 0x38, 0x01, 0x48, 0x01, 0x50, 0x01, 0x70, 0x01,
   if (value.indexOf('0x20, 0x01') === -1) {
-    // debugLog(pA, 'newcode', 1, 'no light detected');
+    infoLogOnce(pA, 'no light detected');
     const service = pA.accessory.getService(pA.platform.Service.Lightbulb);
     if (service) {
       pA.accessory.removeService(service);
     }
   } else {
-    // debugLog(pA, 'newcode', 1, 'light detected');
+    infoLogOnce(pA, 'light detected');
   }
 }
 
 function getModel(value: string, pA:BigAssFans_i6PlatformAccessory) {
+
+  const regex = /[ -~]/g;  // count the printable characters
+  const found = value.match(regex);
+  if (found === null || (found.length !== value.length)) {
+    debugLogOnce(pA, 'redflags', 1, 'Unexpected characters in model name: ' + hexFormat(Buffer.from(value, 'utf8')));
+    return;
+  }
+
   pA.Model = value;
-  debugLog(pA, 'newcode', 1, 'model: ' + pA.Model + ' (' + hexFormat(Buffer.from(value, 'utf8')) + ')');
+  infoLogOnce(pA, 'model: ' + pA.Model + ' (' + hexFormat(Buffer.from(value, 'utf8')) + ')');
 
   pA.accessory.getService(pA.platform.Service.AccessoryInformation)!
     .setCharacteristic(pA.platform.Characteristic.Model, pA.Model);
 
-  // hack for haikus that doesn't seem to support the humidity sensor
+  // hack for haikus that don't seem to support the humidity sensor
   if (pA.Model === 'Haiku H/I Series' || pA.Model === 'Haiku L Series') {
     const service = pA.accessory.getService(pA.platform.Service.HumiditySensor);
     if (service) {
       pA.accessory.removeService(service);
-      debugLog(pA, 'newcode', 4, 'no HumiditySensor for you!');
+      debugLog(pA, 'newcode', 2, 'no HumiditySensor service for model "' + pA.Model + '"');
     }
   }
 
@@ -1232,7 +1034,7 @@ function getModel(value: string, pA:BigAssFans_i6PlatformAccessory) {
     const service = pA.accessory.getService(pA.platform.Service.TemperatureSensor);
     if (service) {
       pA.accessory.removeService(service);
-      debugLog(pA, 'newcode', 4, 'no TemperatureSensor for you either!');
+      debugLog(pA, 'newcode', 2, 'no TemperatureSensor service for model "' + pA.Model + '"');
     }
   }
 }
@@ -1245,7 +1047,7 @@ function firmwareVersion(value: string, pA: BigAssFans_i6PlatformAccessory) {
   } else {
     pA.Firmware = 'nil';
   }
-  debugLog(pA, 'newcode', 5, 'firmware: ' + pA.Firmware);
+  infoLogOnce(pA, 'firmware: ' + pA.Firmware);
 }
 
 function noopDateTime(value: string, pA:BigAssFans_i6PlatformAccessory) {
@@ -1292,42 +1094,37 @@ function lightBrightness(value: number|string, pA:BigAssFans_i6PlatformAccessory
     pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.Brightness, pA.lightStates.Brightness);
     // }
     pA.lightStates.On = true;
-    debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update Light On From lightBrightness: ' + pA.lightStates.On);
+    debugLog(pA, ['light', 'characteristics'], [1, 3], 'update Light On From lightBrightness: ' + pA.lightStates.On);
     pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
   } else {
     // if (pA.lightAutoSwitchOn) {
     // tell homekit the light is off
     pA.lightStates.On = false;
-    debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update Light On From lightBrightness: ' + pA.lightStates.On);
+    debugLog(pA, ['light', 'characteristics'], [1, 3], 'update Light On From lightBrightness: ' + pA.lightStates.On);
     pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
     // }
   }
 }
 
 function lightOnState(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
-  debugLog(pA, 'newcode', 1, 'lightOnState value: ' + value);
-
-  // if (value === 1 && pA.lightStates.On && pA.lightAutoSwitchOn) {
-  //   debugLog(pA, 'newcode', 1, 'ignoring lightOnState - (value === 1 && pA.lightStates.On && pA.lightAutoSwitchOn)');
-  //   return;
-  // }
+  debugLog(pA, 'light', 1, 'lightOnState value: ' + value);
 
   if (value === 2 && pA.lightAutoSwitchOn) {
     pA.lightStates.On = true;
-    debugLog(pA, 'newcode', 1, '(value === 2 && pA.lightAutoSwitchOn): ' + pA.lightStates.On);
-    debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update Light On: ' + pA.lightStates.On);
+    debugLog(pA, 'light', 1, '(value === 2 && pA.lightAutoSwitchOn): ' + pA.lightStates.On);
+    debugLog(pA, ['light', 'characteristics'], [1, 3], 'update Light On: ' + pA.lightStates.On);
     pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
     return;
   }
 
   pA.lightAutoSwitchOn = (value === 2) ? true: false;
   if (pA.showLightAutoSwitch) {
-    debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update light auto switch on: ' + pA.lightAutoSwitchOn);
+    debugLog(pA, ['light', 'characteristics'], [1, 3], 'update light auto switch on: ' + pA.lightAutoSwitchOn);
     pA.lightAutoSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightAutoSwitchOn);
   }
 
   if (value === 2 && pA.lightStates.On) {
-    debugLog(pA, 'newcode', 1, 'ignore auto on value, the light is already on');
+    debugLog(pA, 'light', 1, 'ignore auto on value, the light is already on');
     return;
   }
 
@@ -1337,7 +1134,7 @@ function lightOnState(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
 
   const onValue = (value === 0 ? false : true);
   pA.lightStates.On = onValue;
-  debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update Light On: ' + pA.lightStates.On);
+  debugLog(pA, ['light', 'characteristics'], [1, 3], 'update Light On: ' + pA.lightStates.On);
   pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
 }
 
@@ -1348,13 +1145,7 @@ function fanOnState(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
     pA.fanAutoSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.fanAutoSwitchOn);
   }
 
-  if (value === 2) {
-    // if (pA.fanStates.RotationSpeed > 0) {
-    //   pA.fanStates.On = true;
-    //   debugLog(['newcode', 'characteristics'], [1, 2], 'update FanOn:' + pA.fanStates.On + ' because (auto && speed > 0)');
-    //   pA.fanService.updateCharacteristic(pA.platform.Characteristic.On, pA.fanStates.On);
-    // }
-  } else {
+  if (value !== 2) {
     const onValue = (value === 0 ? false : true);
     pA.fanStates.On = onValue;
     debugLog(pA, 'characteristics', 3, 'update FanOn: ' + pA.fanStates.On);
@@ -1397,9 +1188,14 @@ function fanRotationSpeed(value: number|string, pA:BigAssFans_i6PlatformAccessor
 
 function currentTemperature(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
   if (value < -270 || value > 100) {
-    // Haiku L don't seem to support the temperature sensor, it just reports 1000º.  ignore it
-    if (pA.Model !== 'Haiku L Series') {
-      pA.platform.log.info('current temperature out of range: ' + value + ', ignored');
+    // Haiku L doesn't seem to support the temperature sensor, it just reports 1000º.  ignore it
+
+    if (value === 1000) {
+      infoLogOnce(pA, 'current temperature out of range: ' + value + ', assuming no temperature sensor for model "' + pA.Model + '"');
+      return;
+    } else {
+      // if (pA.Model !== 'Haiku L Series') {
+      hbLog.info('current temperature out of range: ' + value + ', ignored');
     }
     return;
   }
@@ -1414,8 +1210,12 @@ function currentRelativeHumidity(value: number|string, pA:BigAssFans_i6PlatformA
 
   if (value < 0 || value > 100) {
     // Haikus don't seem to support the humidity sensor, they just report 1000%.  ignore it
-    if (pA.Model !== 'Haiku H/I Series' && pA.Model !== 'Haiku L Series') {
-      pA.platform.log.info('current relative humidity out of range: ' + value + ', ignored');
+    if (value === 1000) {
+      infoLogOnce(pA, 'current relative humidity out of range: ' + value + ', assuming no humidity sensor for model "' + pA.Model + '"');
+      return;
+    } else {
+      // if (value !== 1000 && pA.Model !== 'Haiku H/I Series' && pA.Model !== 'Haiku L Series') {
+      hbLog.info('current relative humidity out of range: ' + value + ', ignored');
     }
     return;
   }
@@ -1482,25 +1282,25 @@ function testValue(bytes:Buffer): number|string {
   return('test');
 }
 
-function onOffAutoValue(bytes:Buffer, pA:BigAssFans_i6PlatformAccessory): number|string|undefined {
+function onOffAutoValue(bytes:Buffer): number|string|undefined {
   switch (bytes[0]) {
     case 0x00: // thing is off, auto is off
     case 0x01: // thing is on, may or may not be due to auto being on
     case 0x02: // auto is on fan may or may not be spinning
       return (bytes[0]);
     default:
-      pA.platform.log.warn('unknown value for \'on|off|auto\': ', hexFormat(bytes));
+      hbLog.warn('unknown value for \'on|off|auto\': ', hexFormat(bytes));
       return undefined;
   }
 }
 
-function boolValue(bytes:Buffer, pA:BigAssFans_i6PlatformAccessory): number|string|undefined {
+function boolValue(bytes:Buffer): number|string|undefined {
   switch (bytes[0]) {
     case 0x00:
     case 0x01:
       return(bytes[0]);
     default:
-      pA.platform.log.warn('unknown value for "on|off" or "direction": ' + hexFormat(bytes));
+      hbLog.warn('unknown value for "on|off" or "direction": ' + hexFormat(bytes));
       return undefined;
   }
 }
@@ -1703,6 +1503,29 @@ function debugLog(pA:BigAssFans_i6PlatformAccessory, logTag:string|string[], log
         }
       }
     }
+  }
+}
+
+const messagesLogged:string[] = [];
+
+function debugLogOnce(pA:BigAssFans_i6PlatformAccessory, logTag:string|string[], logLevel:number|number[], logMessage:string) {
+  if (messagesLogged.includes(logMessage)) {
+    debugLog(pA, 'newcode', 1, 'redundant message: "' + logMessage + '"');
+    return;
+  } else {
+    debugLog(pA, logTag, logLevel, logMessage);
+    messagesLogged.push(logMessage);
+  }
+}
+
+
+function infoLogOnce(pA:BigAssFans_i6PlatformAccessory, logMessage: string) {
+  if (messagesLogged.includes(logMessage)) {
+    debugLog(pA, 'newcode', 1, 'redundant message: "' + logMessage + '"');
+    return;
+  } else {
+    hbLog.info(logMessage);
+    messagesLogged.push(logMessage);
   }
 }
 
