@@ -103,6 +103,7 @@ export class BigAssFans_i6PlatformAccessory {
     this.debugLevels['newcode'] = 0;
     this.debugLevels['humidity'] = 0;
     this.debugLevels['progress'] = 0;
+    this.debugLevels['redflags'] = 0;
     this.debugLevels['noopcodes'] = 0;
     this.debugLevels['characteristics'] = 0;
 
@@ -574,11 +575,17 @@ function networkSetup(platformAccessory: BigAssFans_i6PlatformAccessory) {
   *  separate the data into chunks as required and feed them to parseFanMessage() one at a time.
   */
   platformAccessory.client.on('data', (data: Buffer) => {
+    const oldFlag = platformAccessory.OldProtocolFlag;
+
     if (platformAccessory.OldProtocolFlag === undefined ||
         (platformAccessory.OldProtocolFlag === false && platformAccessory.Model === 'i6')) { // try, try, if you don't succeed
       platformAccessory.OldProtocolFlag = ((data.length >= 73) && (data[data.length - 73] === 0x28));
       const msgString = 'assuming ' + (platformAccessory.OldProtocolFlag ? 'old' : 'new') + ' protocol';
       debugLog(platformAccessory, 'network', 1, msgString);
+
+      if (oldFlag === false && platformAccessory.OldProtocolFlag === true) {
+        debugLog(platformAccessory, 'redflag', 1, 'succeeded: OldProtocolFlag flipped to true');
+      }
     }
     onData(platformAccessory, data);
   });
@@ -771,7 +778,6 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
   const assumedChunkSize = chunkSizeSansToken + tokenLength + 1; // the "+ 1" is for the terminating 0xc0
 
   // this assertion about the remaining data length may be entirely unnecessary
-
   if (data.length !== assumedChunkSize) {
     if (data.length === (assumedChunkSize + 72)) {
       debugLog(platformAccessory, 'redflags', 1, 'would be chunkSizeSansToken warning averted');
@@ -781,10 +787,9 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
         debugLog(platformAccessory, 'redflags', 1, 'OldProtocolFlag: ' + platformAccessory.OldProtocolFlag);
       }
     } else {
-      // repeating the log.warn text because warnings and debug messages are not displayed in synchrony
       hbLog.warn('chunkSizeSansToken: ' + assumedChunkSize + ', not what we expected with data length: ' + data.length);
       debugLog(platformAccessory, 'redflags', 1, 'OldProtocolFlag: ' + platformAccessory.OldProtocolFlag);
-      debugLog(platformAccessory, 'redflags', 3, 'rawChunk: ' + hexFormat(rawChunk));
+      debugLog(platformAccessory, 'redflags', 1, 'rawChunk: ' + hexFormat(rawChunk));
 
       return [];
     }
@@ -1211,7 +1216,7 @@ function currentRelativeHumidity(value: number|string, pA:BigAssFans_i6PlatformA
   if (value < 0 || value > 100) {
     // Haikus don't seem to support the humidity sensor, they just report 1000%.  ignore it
     if (value === 1000) {
-      infoLogOnce(pA, 'current relative humidity out of range: ' + value + ', assuming no humidity sensor for model "' + pA.Model + '"');
+      infoLogOnce(pA, 'Assuming no humidity sensor for model "' + pA.Model + '"');
       return;
     } else {
       // if (value !== 1000 && pA.Model !== 'Haiku H/I Series' && pA.Model !== 'Haiku L Series') {
