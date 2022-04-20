@@ -1131,7 +1131,7 @@ function lightOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
       debugLog(pA, ['light', 'characteristics'], [1, 3], 'update light auto switch off: ' + pA.lightAutoSwitchOn);
       pA.lightAutoSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightAutoSwitchOn);
     }
-  } else if (value === 2) {
+  } else if (value === 2 && pA.lightAutoSwitchOn === false) {
     pA.lightAutoSwitchOn = true;
     debugLog(pA, ['light', 'characteristics'], [1, 3], 'update light auto switch on: ' + pA.lightAutoSwitchOn);
     pA.lightAutoSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightAutoSwitchOn);
