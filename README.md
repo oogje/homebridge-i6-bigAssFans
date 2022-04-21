@@ -1,5 +1,7 @@
 <span align="center">
-<h1 align="center"><img src="https://raw.githubusercontent.com/oogje/homebridge-i6-bigAssFans/main/IMG_3799.jpg"/><img src="https://raw.githubusercontent.com/oogje/homebridge-i6-bigAssFans/main/HaikuH.jpg"/></h1>
+<h1 align="center"><img src="https://raw.githubusercontent.com/oogje/homebridge-i6-bigAssFans/main/IMG_3799.jpg"/>
+<img src="https://raw.githubusercontent.com/oogje/homebridge-i6-bigAssFans/main/HaikuH.jpg"/>
+</h1>
 
 ## homebridge-i6-bigassfans
 
@@ -11,27 +13,37 @@
 
 </span>
 
-`homebridge-i6-bigassfans` is a plugin for Homebridge which allows you to control a Big Ass Fans model i6.
+# `The following text refers to the betas, not the latest release`.
 
-This works with my LED equipped i6 fan.  I'm hoping it works for you.  I created the plugin by observing network traffic and for the 
-most part guessing the format of the binary messages that were sent to and from the fan.  Of the appoximately 80 unique 
-message types I've seen, I think I know what about half of them probably mean.
+`homebridge-i6-bigassfans` is a plugin for Homebridge which allows you to control Big Ass Fans i6, Haiku H/I Series and Haiku L Series fans.
+
+The plugin name reflects its history in that the it was created to support, and was limited to, i6 model fans when no other homebridge
+alternative was available. 
+Some time around the beginning of April 2022, with a firmware update to the Haiku series fans, BigAssFans changed the Haiku's
+communication protocol to be compatible with the i6 model, and therefore this plugin. 
+Having access only to an i6 fan, I collaborated with Haiku fan owners (notably @pponce) to add support for their fans. 
+I've guessed the format of the binary protocol and of the approximately eighty unique message types I've seen, I think I know what about half of them mean. 
 
 ### Bugs
 
-The network connection to the fan will reset on occassion.  I try to handle that gracefully but if it happens just as you
-issue a command (e.g., turn on the light) as oppposed to the periodic probe message, the command will be ignored.  Try again after two seconds.
+The network connection to the fan will reset on occasion.  I try to handle that gracefully but if it happens at the moment you
+issue a command (e.g., turn on the light) as opposed when to the periodic probe message is issued, the command will be ignored.  
+Try again after two seconds.
 
 
 ### Features
 
 * Turn fan and/or light on or off!
 * Change speed, and direction (keep in mind Big Ass Fans frowns on reversing speed.)
+* Detect existence of light
 * Change brightness level of LED lamp.
-* See the fan's bluetooth remote's temperature and humidity sensors.
+* See the fan's bluetooth remote's temperature and humidity sensors (i6 only).
+* See the fan's temperature sensors (Haiku Fans).
 * Turn Whoosh Mode on or off.
-* Turn Dim to Warm on or off.
-* Turn fan's Auto mode on or off.
+* Turn Dim to Warm on or off (i6 only).
+* Turn fan's fan Auto mode on or off.
+* Turn the fan's light Auto mode on or off
+* Turn on Eco Mode (Haiku fans only)
 
 ### Installation
 
@@ -49,7 +61,7 @@ Add the `BigAssFans-i6` platform in `config.json` in your home directory inside 
 
 Add your fan(s) in the `fans` array.
 
-Example configuration:
+Example configuration simple:
 
 ```js
 {
@@ -58,8 +70,8 @@ Example configuration:
       "platform": "BigAssFans-i6",
             "fans": [
                 {
-                    "name": "Big Fan",
-                    "mac": "b8:f0:09:ac:db:b6",
+                    "name": "Big Fan i6",
+                    "mac": "20:F8:5E:00:00:00",
                     "ip": "192.168.7.150"
                 }
             ]
@@ -68,6 +80,37 @@ Example configuration:
 }
 ```
 
+Example configuration with optional params and multiple fans:
+
+```js
+{
+  "platforms": [
+    {
+      "platform": "BigAssFans-i6",
+              "fans": [
+                  {
+                    "name": "Big Fan i6",
+                    "mac": "20:F8:5E:00:00:00",
+                    "ip": "192.168.1.150",
+                    "fanAuto": true,
+                    "lightAuto": true,
+                    "whoosh": false,
+                    "dimToWarm": false
+                  },
+                  {
+                    "name": "BigAssFans Haiku",
+                    "mac": "20:F8:5E:00:00:00",
+                    "ip": "192.168.1.151",
+                    "fanAuto": true,
+                    "lightAuto": true,
+                    "whoosh": true,
+                    "ecoMode": true
+                   }
+                ]
+    }
+  ]
+}
+```
 
 #### Platform configuration fields
 
@@ -89,7 +132,11 @@ Adds accessory switch for Whoosh Mode (true/false)
 * `dimToWarm` [optional]
 Adds accessory switch for Dim to Warm (true/false)
 * `fanAuto` [optional]
-Adds accessory switch for the fan's Auto mode (true/false)
+Adds accessory switch for the fan's fan Auto mode (true/false)
+* `lightAuto` [optional]
+Adds accessory switch for the fan's light Auto mode (true/false)
+* `ecoMode` [optional]
+Adds accessory switch for the fan's Eco mode (true/false)
 
 ### Troubleshooting
 
@@ -107,8 +154,10 @@ homebridge -D
 
 [homebridge-miot](https://github.com/merdok/homebridge-miot) - whose style served as a guide.
 
+[Bruce Pennypacker](https://bruce.pennypacker.org/2015/07/17/hacking-bigass-fans-with-senseme/) - whose blog provided some clarity.
+
 [homebridge-bigAssFans](https://github.com/sean9keenan/homebridge-bigAssFans) - where the Haiku message protocol gave me some insight.
 
 [HAP-NodeJS](https://github.com/KhaosT/HAP-NodeJS) & [homebridge](https://github.com/nfarina/homebridge) - for making this possible.
 
-[Big Ass Fans](https://www.bigassfans.com) - who I hope is working on their Homekit implementation.
+[Big Ass Fans](https://www.bigassfans.com) - who I hope is working on their HomeKit implementation.
