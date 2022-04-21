@@ -554,11 +554,11 @@ function networkSetup(pA: BigAssFans_i6PlatformAccessory) {
     } else if (err.code === 'ETIMEDOUT') {
       hbLog.error(pA.Name + '(' + pA.IP + ')' + ' connection timed out [ETIMEDOUT].  '  +
         'Check that your fan has power and the correct IP is in json.config.');
-        return;
+      return;
     } else if (err.code === 'ECONNREFUSED') {
       hbLog.error(pA.Name + '(' + pA.IP + ')' + ' connection refused [ECONNREFUSED].  '  +
           'Check that the correct IP is in json.config.');
-          return;
+      return;
     } else if (err.code === 'ENETUNREACH') {
       hbLog.error(pA.Name + '(' + pA.IP + ')' + ' is unreachable [ENETUNREACH].  ' +
             'Check the correct IP is in json.config.');
@@ -584,12 +584,12 @@ function networkSetup(pA: BigAssFans_i6PlatformAccessory) {
   /**
   *  separate the data into chunks as required and feed them to parseFanMessage() one at a time.
   */
-   pA.client.on('data', (data: Buffer) => {
+  pA.client.on('data', (data: Buffer) => {
     const oldFlag = pA.OldProtocolFlag;
 
     if (pA.OldProtocolFlag === undefined ||
         (pA.OldProtocolFlag === false && pA.Model === 'i6')) { // try, try, if you don't succeed
-          pA.OldProtocolFlag = ((data.length >= 73) && (data[data.length - 73] === 0x28));
+      pA.OldProtocolFlag = ((data.length >= 73) && (data[data.length - 73] === 0x28));
       const msgString = 'assuming ' + (pA.OldProtocolFlag ? 'old' : 'new') + ' protocol';
       debugLog(pA, 'network', 1, msgString);
 
