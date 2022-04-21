@@ -1122,9 +1122,11 @@ function lightOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
 
   if (value === 0 || value === 1) {
     const onValue = (value === 0 ? false : true);
-    pA.lightStates.On = onValue;
-    debugLog(pA, ['light', 'characteristics'], [1, 3], 'update Light On: ' + pA.lightStates.On);
-    pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
+    if (onValue !== pA.lightStates.On) {
+      pA.lightStates.On = onValue;
+      debugLog(pA, ['light', 'characteristics'], [1, 3], 'update Light On: ' + pA.lightStates.On);
+      pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
+    }
 
     if (pA.lightAutoSwitchOn) {
       pA.lightAutoSwitchOn = false;
