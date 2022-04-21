@@ -13,7 +13,7 @@
 
 </span>
 
-# `The following text refers to the betas, not the latest release`.
+## `The following text refers to the betas, not the latest release`.
 
 `homebridge-i6-bigassfans` is a plugin for Homebridge which allows you to control Big Ass Fans i6, Haiku H/I Series and Haiku L Series fans.
 
