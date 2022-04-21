@@ -536,41 +536,47 @@ import net = require('net');
 /**
 * connect to the fan, send an initialization message, establish the error and data callbacks and start a keep-alive interval timer.
 */
-function networkSetup(platformAccessory: BigAssFans_i6PlatformAccessory) {
-  platformAccessory.client = net.connect(31415, platformAccessory.IP, () => {
-    debugLog(platformAccessory, 'progress', 2, 'connected!');
-    platformAccessory.client.setKeepAlive(true);
+function networkSetup(pA: BigAssFans_i6PlatformAccessory) {
+  pA.client = net.connect(31415, pA.IP, () => {
+    debugLog(pA, 'progress', 2, 'connected!');
+    pA.client.setKeepAlive(true);
 
-    clientWrite(platformAccessory.client, Buffer.from([0xc0, 0x12, 0x02, 0x1a, 0x00, 0xc0]), platformAccessory);
+    clientWrite(pA.client, Buffer.from([0xc0, 0x12, 0x02, 0x1a, 0x00, 0xc0]), pA);
   });
 
   let errHandler;
 
-  platformAccessory.client.on('error', errHandler = (err) => {
+  pA.client.on('error', errHandler = (err) => {
     if (err.code === 'ECONNRESET') {
-      hbLog.warn(platformAccessory.Name + ' network connection reset [ECONNRESET]. Attempting reconnect in 2 seconds.');
+      hbLog.warn(pA.Name + '(' + pA.IP + ')' + ' network connection reset [ECONNRESET]. Attempting reconnect in 2 seconds.');
     } else if (err.code === 'EPIPE') {
-      hbLog.warn(platformAccessory.Name + ' network connection broke [EPIPE]. Attempting reconnect in 2 seconds.');
+      hbLog.warn(pA.Name + '(' + pA.IP + ')' + ' network connection broke [EPIPE]. Attempting reconnect in 2 seconds.');
     } else if (err.code === 'ETIMEDOUT') {
-      hbLog.warn(platformAccessory.Name + ' connection timed out [ETIMEDOUT].  '  +
+      hbLog.error(pA.Name + '(' + pA.IP + ')' + ' connection timed out [ETIMEDOUT].  '  +
         'Check that your fan has power and the correct IP is in json.config.');
+        return;
     } else if (err.code === 'ECONNREFUSED') {
-      hbLog.warn(platformAccessory.Name + ' connection refused [ECONNREFUSED].  '  +
+      hbLog.error(pA.Name + '(' + pA.IP + ')' + ' connection refused [ECONNREFUSED].  '  +
           'Check that the correct IP is in json.config.');
+          return;
+    } else if (err.code === 'ENETUNREACH') {
+      hbLog.error(pA.Name + '(' + pA.IP + ')' + ' is unreachable [ENETUNREACH].  ' +
+            'Check the correct IP is in json.config.');
+      return;
     } else {
-      hbLog.warn(platformAccessory.Name + ': Unhandled network error: ' + err.code + '.  Attempting reconnect in 2 seconds.');
+      hbLog.warn(pA.Name + '(' + pA.IP + ')' + ': Unhandled network error: ' + err.code + '.  Attempting reconnect in 2 seconds.');
     }
-    platformAccessory.client = undefined;
+    pA.client = undefined;
     setTimeout(() => {
       // already did this one or more times, don't need to send initilization message
-      platformAccessory.client = net.connect(31415, platformAccessory.IP, () => {
-        hbLog.info(platformAccessory.Name + ' reconnected!');
+      pA.client = net.connect(31415, pA.IP, () => {
+        hbLog.info(pA.Name + ' reconnected!');
       });
-      platformAccessory.client.on('error', (err) => {
+      pA.client.on('error', (err) => {
         errHandler(err);
       });
-      platformAccessory.client.on('data', (data) => {
-        onData(platformAccessory, data);
+      pA.client.on('data', (data) => {
+        onData(pA, data);
       });
     }, 2000);
   });
@@ -578,23 +584,23 @@ function networkSetup(platformAccessory: BigAssFans_i6PlatformAccessory) {
   /**
   *  separate the data into chunks as required and feed them to parseFanMessage() one at a time.
   */
-  platformAccessory.client.on('data', (data: Buffer) => {
-    const oldFlag = platformAccessory.OldProtocolFlag;
+   pA.client.on('data', (data: Buffer) => {
+    const oldFlag = pA.OldProtocolFlag;
 
-    if (platformAccessory.OldProtocolFlag === undefined ||
-        (platformAccessory.OldProtocolFlag === false && platformAccessory.Model === 'i6')) { // try, try, if you don't succeed
-      platformAccessory.OldProtocolFlag = ((data.length >= 73) && (data[data.length - 73] === 0x28));
-      const msgString = 'assuming ' + (platformAccessory.OldProtocolFlag ? 'old' : 'new') + ' protocol';
-      debugLog(platformAccessory, 'network', 1, msgString);
+    if (pA.OldProtocolFlag === undefined ||
+        (pA.OldProtocolFlag === false && pA.Model === 'i6')) { // try, try, if you don't succeed
+          pA.OldProtocolFlag = ((data.length >= 73) && (data[data.length - 73] === 0x28));
+      const msgString = 'assuming ' + (pA.OldProtocolFlag ? 'old' : 'new') + ' protocol';
+      debugLog(pA, 'network', 1, msgString);
 
-      if (oldFlag === false && platformAccessory.OldProtocolFlag === true) {
-        debugLog(platformAccessory, 'redflag', 1, 'succeeded: OldProtocolFlag flipped to true');
+      if (oldFlag === false && pA.OldProtocolFlag === true) {
+        debugLog(pA, 'redflag', 1, 'succeeded: OldProtocolFlag flipped to true');
       }
     }
-    onData(platformAccessory, data);
+    onData(pA, data);
   });
 
-  if (platformAccessory.ProbeFrequency !== 0) {
+  if (pA.ProbeFrequency !== 0) {
     // attempt to prevent the occassional socket reset.
     // sending the mysterious code that the vendor app seems to send once every 15s but I'll go with every minute -  didn't prevent it.
     // can try going to every 15 seconds like the vendor app seems to do. - didn't work
@@ -603,12 +609,12 @@ function networkSetup(platformAccessory: BigAssFans_i6PlatformAccessory) {
     // now I got an EPIPE 5+ hours after a reset, and repeaated EPIPEs evert minute for the next 7 minutes, then one more after 4 minutes
     // then clear sailing for 1+ hours so far.
     setInterval(( )=> {
-      if (platformAccessory.client !== undefined) {
-        clientWrite(platformAccessory.client, Buffer.from([0xc0, 0x12, 0x04, 0x1a, 0x02, 0x08, 0x03, 0xc0]), platformAccessory);
+      if (pA.client !== undefined) {
+        clientWrite(pA.client, Buffer.from([0xc0, 0x12, 0x04, 0x1a, 0x02, 0x08, 0x03, 0xc0]), pA);
       } else {
-        debugLog(platformAccessory, 'network', 4, 'client undefined in setInterval callback');
+        debugLog(pA, 'network', 4, 'client undefined in setInterval callback');
       }
-    }, platformAccessory.ProbeFrequency);
+    }, pA.ProbeFrequency);
   }
 }
 

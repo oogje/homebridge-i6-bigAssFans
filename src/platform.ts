@@ -87,10 +87,10 @@ export class BigAssFans_i6Platform implements DynamicPlatformPlugin {
         return;
       }
 
-      checkDevice(platform, fan.ip, (client, data: Buffer) => {
-        if (data[0] !== 0xc0) {
-          return;
-        }
+      // checkDevice(platform, fan.ip, (client, data: Buffer) => {
+      //   if (data[0] !== 0xc0) {
+      //     return;
+      //   }
         // generate a unique id for the accessory this should be generated from
         // something globally unique, but constant, for example, the device serial
         // number or MAC address
@@ -145,7 +145,7 @@ export class BigAssFans_i6Platform implements DynamicPlatformPlugin {
           // link the accessory to your platform
           platform.api.registerPlatformAccessories(PLUGIN_NAME, PLATFORM_NAME, [accessory]);
         }
-      });
+      // });
     }
   }
 }
