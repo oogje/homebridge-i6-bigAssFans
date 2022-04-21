@@ -30,7 +30,7 @@ The network connection to the fan will reset on occasion.  I try to handle that 
 issue a command (e.g., turn on the light) as opposed when to the periodic probe message is issued, the command will be ignored.  
 Try again after two seconds.
 
-Occasionally HomeKit will briefly show the light (if equipped) or the fan auto switch (if configured) "on" even though they are actually off.
+Occasionally HomeKit will briefly show the light (if equipped) or the light auto switch (if configured) "on" even though they are actually off.
 
 
 ### Features
