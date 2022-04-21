@@ -15,7 +15,7 @@
 
 `homebridge-i6-bigassfans` is a plugin for Homebridge which allows you to control a Big Ass Fans model i6, Haiku H/I Series and Haiku L Series fans.
 
-I created the plugin origially to support only i6 fans and observing network traffic of my personal i6 fan. Recently, with a firmware update to the Haiku series fans, BigAssFans changed the protocal of how those fans communicate to conform to how i6 fans communicated. Since I don't own a Haiku fan, I colaborated with Haiku fan owners to add support for those fans. 
+I created the plugin origially to support only i6 fans by observing network traffic of my personal i6 fan. Recently, with a firmware update to the Haiku series fans, BigAssFans changed the protocol of how those fans communicate to conform to how i6 fans communicated. Since I don't own a Haiku fan, I colaborated with Haiku fan owners to add support for those fans. 
 For the most part i'm guessing the format of the binary messages that are sent to and from the fan.  Of the appoximately 80 unique message types I've seen, I think I know what about half of them probably mean. 
 
 ### Bugs
