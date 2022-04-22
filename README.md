@@ -38,10 +38,10 @@ Occasionally HomeKit will briefly show the light (if equipped) or the light auto
 * Display the fan's bluetooth remote's temperature and humidity sensors (i6 only).
 * Display the fan's temperature sensors (Haiku Fans).
 * Turn Whoosh Mode on or off.
-* Turn Dim to Warm on or off.
+* Turn Dim to Warm on or off (i6 Fans).
 * Turn Fan Auto mode on or off.
 * Turn Light Auto mode on or off.
-* Turn on Eco Mode (Haiku fans only).
+* Turn Eco Mode on or off (Haiku fans only).
 
 ### **Installation**
 
