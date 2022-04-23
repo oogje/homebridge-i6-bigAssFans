@@ -204,7 +204,8 @@ export class BigAssFans_i6PlatformAccessory {
       .onGet(this.getColorTemperature.bind(this));
 
     // Current Temperature
-    if (this.accessory.context.device.showTemperature) {
+    debugLog(this, 'newcode', 1, 'this.accessory.context.device.showTemperature: ' + this.accessory.context.device.showTemperature);
+    if (this.accessory.context.device.showTemperature === undefined || this.accessory.context.device.showTemperature !== false) {
       this.temperatureSensorService = this.accessory.getService(this.platform.Service.TemperatureSensor) ||
         this.accessory.addService(this.platform.Service.TemperatureSensor);
       accessoryName = capitalizeName ?  ' Temperature' : ' temperature';
@@ -1265,8 +1266,9 @@ function fanRotationSpeed(value: number|string, pA:BigAssFans_i6PlatformAccessor
 }
 
 function currentTemperature(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
-  if (pA.accessory.context.device.showTemperature === false) {
+  if (pA.accessory.context.device.showTemperature !== undefined && pA.accessory.context.device.showTemperature === false) {
     // should really replace this function with noop in property table in this case
+    debugLog(pA, 'newcode', 1, 'ignoring temperature');
     return;
   }
 
