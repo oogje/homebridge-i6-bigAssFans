@@ -16,6 +16,10 @@ const PROPERTYHANDLERFUNCTION = 1;
 
 const ONEBYTEHEADER = [0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03];
 
+const MODEL_i6 =       'i6';
+const MODEL_HAIKU_L =  'Haiku L Series';
+const MODEL_HAIKU_HI = 'Haiku H/I Series';
+
 export class BigAssFans_i6PlatformAccessory {
   public fanService!: Service;
   public lightBulbService!: Service;
@@ -53,10 +57,15 @@ export class BigAssFans_i6PlatformAccessory {
   public showEcoModeSwitch = false;
   public ecoModeSwitchOn = false;
 
+  public showTemperature = true;
+
   public IP: string;
   public MAC: string;
   public Name = 'naamloos';
   public ProbeFrequency = 60000;
+
+  public modelUnknown = true;
+  public firmwareUnknown = true;
 
   public Model = 'unknown model';
   public SSID = 'apname';
@@ -140,13 +149,24 @@ export class BigAssFans_i6PlatformAccessory {
     * set accessory information
     */
 
+    debugLog(this, 'newcode', 1, 'user supplied model: ' + this.accessory.context.device.fanModel);
+    if (this.accessory.context.device.fanModel !== undefined && this.accessory.context.device.fanModel !== 'other') {
+      this.Model = this.accessory.context.device.fanModel;
+    } else {
+      this.Model = 'unknown';
+    }
+
     const capitalizeName = accessory.context.device.name[0] === accessory.context.device.name[0].toUpperCase();
     let accessoryName:string;
 
+    // why the '*' in the model characteristic, but not in this.model? it's cosmetic to indicate where the model name came
+    //  from ('*' user, no '*', the fan), but we want the class property to have the 'real' name regardless.
     this.accessory.getService(this.platform.Service.AccessoryInformation)!
       .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Big Ass Fans')
-      .setCharacteristic(this.platform.Characteristic.Model, 'unknown')
+      .setCharacteristic(this.platform.Characteristic.Model, this.Model + '*')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, this.MAC);
+
+    debugLog(this, 'newcode', 1, 'this.Model: ' + this.Model + '*');
 
     // Fan
     this.fanService = this.accessory.getService(this.platform.Service.Fan) ||
@@ -184,12 +204,14 @@ export class BigAssFans_i6PlatformAccessory {
       .onGet(this.getColorTemperature.bind(this));
 
     // Current Temperature
-    this.temperatureSensorService = this.accessory.getService(this.platform.Service.TemperatureSensor) ||
-      this.accessory.addService(this.platform.Service.TemperatureSensor);
-    accessoryName = capitalizeName ?  ' Temperature' : ' temperature';
-    this.temperatureSensorService.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name + accessoryName);
-    this.temperatureSensorService.getCharacteristic(this.platform.Characteristic.CurrentTemperature)
-      .onGet(this.getCurrentTemperature.bind(this));
+    if (this.accessory.context.device.showTemperature) {
+      this.temperatureSensorService = this.accessory.getService(this.platform.Service.TemperatureSensor) ||
+        this.accessory.addService(this.platform.Service.TemperatureSensor);
+      accessoryName = capitalizeName ?  ' Temperature' : ' temperature';
+      this.temperatureSensorService.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name + accessoryName);
+      this.temperatureSensorService.getCharacteristic(this.platform.Characteristic.CurrentTemperature)
+        .onGet(this.getCurrentTemperature.bind(this));
+    }
 
     // Current Relative Humidity
     this.humiditySensorService = this.accessory.getService(this.platform.Service.HumiditySensor) ||
@@ -278,8 +300,7 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     /**
-    * open the fan's communication port, establish the data and error callbacks, send the initialization sequence  and start
-    * the heartbeat
+    * open the fan's communication port, establish the data and error callbacks, send the initialization sequence and send a probe
     */
     networkSetup(this);
     debugLog(this, 'progress', 2, 'constructed');
@@ -420,7 +441,7 @@ export class BigAssFans_i6PlatformAccessory {
 
   // Mireds!
   async setColorTemperature(value: CharacteristicValue) {
-    debugLog(this, 'characteristics', 3, 'Set Characteristic ColorTemperature  -> ' + value);
+    debugLog(this, ['newcode', 'characteristics'], [1, 3], 'Set Characteristic ColorTemperature  -> ' + value);
     this.lightStates.ColorTemperature = Math.round(1000000/(value as number));
     const bigNumberArray = stuffed(makeBigAssNumberValues(this.lightStates.ColorTemperature));
     const firstPart = [0xc0, 0x12, bigNumberArray.length + 6, 0x12, bigNumberArray.length + 4, 0x1a,
@@ -430,7 +451,7 @@ export class BigAssFans_i6PlatformAccessory {
 
   async getColorTemperature(): Promise<CharacteristicValue> {
     const colorTemperature = Math.round(1000000 / this.lightStates.ColorTemperature);
-    debugLog(this, 'characteristics', 4, 'Get Characteristic ColorTemperature -> ' + colorTemperature);
+    debugLog(this, ['newcode', 'characteristics'], [1, 4], 'Get Characteristic ColorTemperature -> ' + colorTemperature);
     return colorTemperature;
   }
 
@@ -513,7 +534,7 @@ export class BigAssFans_i6PlatformAccessory {
 
   async getLightAutoSwitchOnState(): Promise<CharacteristicValue> {
     const isOn = this.lightAutoSwitchOn;
-    debugLog(this, ['newcode', 'characteristics'], [1, 3], 'Get Characteristic Light Auto Switch On -> ' + isOn);
+    debugLog(this, 'characteristics', 3, 'Get Characteristic Light Auto Switch On -> ' + isOn);
     return isOn;
   }
 
@@ -531,11 +552,10 @@ export class BigAssFans_i6PlatformAccessory {
   }
 }
 
-import net = require('net');
-// import { parseCharacteristicJSON } from 'hap-nodejs';
 /**
 * connect to the fan, send an initialization message, establish the error and data callbacks and start a keep-alive interval timer.
 */
+import net = require('net');
 function networkSetup(pA: BigAssFans_i6PlatformAccessory) {
   pA.client = net.connect(31415, pA.IP, () => {
     debugLog(pA, 'progress', 2, 'connected!');
@@ -588,7 +608,7 @@ function networkSetup(pA: BigAssFans_i6PlatformAccessory) {
     const oldFlag = pA.OldProtocolFlag;
 
     if (pA.OldProtocolFlag === undefined ||
-        (pA.OldProtocolFlag === false && pA.Model === 'i6')) { // try, try, if you don't succeed
+        (pA.OldProtocolFlag === false && pA.Model === MODEL_i6)) { // try, try, if you don't succeed
       pA.OldProtocolFlag = ((data.length >= 73) && (data[data.length - 73] === 0x28));
       const msgString = 'assuming ' + (pA.OldProtocolFlag ? 'old' : 'new') + ' protocol';
       debugLog(pA, 'network', 1, msgString);
@@ -776,7 +796,6 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
     chunkSizeSansToken = data[0] + 2; // +1 for the 0x12 we're going to insert at the beginning, and 1 for the final 0xc0
     // stuff a start byte (0x12) to make everything copacetic down the road
     data = Buffer.concat([Buffer.from([0x12]), data]);
-    //   debugLog(platformAccessory, 'cluing', 2, 'Et tu, "' + platformAccessory.Model + '"');
   } else {
     // accumulate remaining size (bigAssNumber)
     banArray = [];
@@ -1031,40 +1050,58 @@ function getModel(value: string, pA:BigAssFans_i6PlatformAccessory) {
     return;
   }
 
-  pA.Model = value;
-  infoLogOnce(pA, 'model: ' + pA.Model + ' (' + hexFormat(Buffer.from(value, 'utf8')) + ')');
+  if (pA.modelUnknown) {  // need to do this only once
+    pA.modelUnknown = false;
 
-  pA.accessory.getService(pA.platform.Service.AccessoryInformation)!
-    .setCharacteristic(pA.platform.Characteristic.Model, pA.Model);
-
-  // hack for haikus that don't seem to support the humidity sensor
-  if (pA.Model === 'Haiku H/I Series' || pA.Model === 'Haiku L Series') {
-    const service = pA.accessory.getService(pA.platform.Service.HumiditySensor);
-    if (service) {
-      pA.accessory.removeService(service);
-      debugLog(pA, 'newcode', 2, 'no HumiditySensor service for model "' + pA.Model + '"');
+    if (pA.accessory.context.device.devModelOverride) {
+      debugLog(pA, 'progress', 0, 'overriding model "' + value + '" with "' + pA.accessory.context.device.devModelOverride + '"');
+      value = pA.accessory.context.device.devModelOverride;
     }
-  }
+    pA.Model = value;
+    debugLog(pA, 'progress', 0, 'model: ' + pA.Model + ' (' + hexFormat(Buffer.from(value, 'utf8')) + ')');
 
-  // hack for haiku that doesn't seem to support the temperature sensor
-  if (pA.Model === 'Haiku L Series') {
-    const service = pA.accessory.getService(pA.platform.Service.TemperatureSensor);
-    if (service) {
-      pA.accessory.removeService(service);
-      debugLog(pA, 'newcode', 2, 'no TemperatureSensor service for model "' + pA.Model + '"');
+    pA.accessory.getService(pA.platform.Service.AccessoryInformation)!
+      .setCharacteristic(pA.platform.Characteristic.Model, pA.Model);
+
+    if (pA.Model === MODEL_HAIKU_HI || pA.Model === MODEL_HAIKU_L) {
+      // this.lightBulbService.getCharacteristic(this.platform.Characteristic.ColorTemperature)
+      //   .removeAllListeners('set')
+      //   .removeAllListeners('get');
+      debugLog(pA, 'newcode', 1, 'no ColorTemperature Characteristic for model "' + pA.Model + '"');
+      pA.lightBulbService.removeCharacteristic(pA.lightBulbService.getCharacteristic(pA.platform.Characteristic.ColorTemperature));
+    }
+
+    if (pA.Model === MODEL_HAIKU_HI || pA.Model === MODEL_HAIKU_L) {
+      const service = pA.accessory.getService(pA.platform.Service.HumiditySensor);
+      if (service) {
+        pA.accessory.removeService(service);
+        debugLog(pA, 'newcode', 1, 'no HumiditySensor service for model "' + pA.Model + '"');
+      }
+    }
+
+    if (pA.Model === MODEL_HAIKU_L) {
+      const service = pA.accessory.getService(pA.platform.Service.TemperatureSensor);
+      if (service) {
+        pA.accessory.removeService(service);
+        debugLog(pA, 'newcode', 2, 'no TemperatureSensor service for model "' + pA.Model + '"');
+      }
     }
   }
 }
 
 function firmwareVersion(value: string, pA: BigAssFans_i6PlatformAccessory) {
-  pA.Firmware = value;
-  if (value.length !== 0) {
-    pA.accessory.getService(pA.platform.Service.AccessoryInformation)!
-      .setCharacteristic(pA.platform.Characteristic.FirmwareRevision, pA.Firmware);
-  } else {
-    pA.Firmware = 'nil';
+  if (pA.firmwareUnknown) {  // need to do this only once
+    pA.firmwareUnknown = false;
+
+    pA.Firmware = value;
+    if (value.length !== 0) {
+      pA.accessory.getService(pA.platform.Service.AccessoryInformation)!
+        .setCharacteristic(pA.platform.Characteristic.FirmwareRevision, pA.Firmware);
+    } else {
+      pA.Firmware = 'nil';
+    }
+    debugLog(pA, 'progress', 0, 'firmware: ' + pA.Firmware);
   }
-  infoLogOnce(pA, 'firmware: ' + pA.Firmware);
 }
 
 function noopDateTime(value: string, pA:BigAssFans_i6PlatformAccessory) {
@@ -1097,10 +1134,15 @@ function noopToken(value: string, pA:BigAssFans_i6PlatformAccessory) {
 
 
 function lightColorTemperature(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
-  const mireds = Math.round(1000000 / pA.lightStates.ColorTemperature);
-  pA.lightStates.ColorTemperature = Number(value);
-  debugLog(pA, 'characteristics', 3, 'update ColorTemperature: ' + mireds);
-  pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.ColorTemperature, mireds);
+  // some fans don't have ColorTemperature capability but they still send (static) values, should change propertyTable to call noop instead
+  if (pA.Model !== MODEL_HAIKU_HI && pA.Model !== MODEL_HAIKU_L) {
+    const mireds = Math.round(1000000 / pA.lightStates.ColorTemperature);
+    pA.lightStates.ColorTemperature = Number(value);
+    debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update ColorTemperature: ' + mireds);
+    pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.ColorTemperature, mireds);
+  } else {
+    debugLog(pA, 'newcode', 1, 'ColorTemperature: ignored');
+  }
 }
 
 function lightBrightness(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
@@ -1223,14 +1265,19 @@ function fanRotationSpeed(value: number|string, pA:BigAssFans_i6PlatformAccessor
 }
 
 function currentTemperature(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
+  if (pA.accessory.context.device.showTemperature === false) {
+    // should really replace this function with noop in property table in this case
+    return;
+  }
+
   if (value < -270 || value > 100) {
     // Haiku L doesn't seem to support the temperature sensor, it just reports 1000º.  ignore it
+    // should replace this function with noop in property table
 
     if (value === 1000) {
       infoLogOnce(pA, 'current temperature out of range: ' + value + ', assuming no temperature sensor for model "' + pA.Model + '"');
       return;
     } else {
-      // if (pA.Model !== 'Haiku L Series') {
       hbLog.info('current temperature out of range: ' + value + ', ignored');
     }
     return;
@@ -1246,11 +1293,11 @@ function currentRelativeHumidity(value: number|string, pA:BigAssFans_i6PlatformA
 
   if (value < 0 || value > 100) {
     // Haikus don't seem to support the humidity sensor, they just report 1000%.  ignore it
+    // should replace this function with noop in property table
     if (value === 1000) {
       infoLogOnce(pA, 'Assuming no humidity sensor for model "' + pA.Model + '"');
       return;
     } else {
-      // if (value !== 1000 && pA.Model !== 'Haiku H/I Series' && pA.Model !== 'Haiku L Series') {
       hbLog.info('current relative humidity out of range: ' + value + ', ignored');
     }
     return;
@@ -1554,7 +1601,7 @@ const messagesLogged:string[] = [];
 
 function debugLogOnce(pA:BigAssFans_i6PlatformAccessory, logTag:string|string[], logLevel:number|number[], logMessage:string) {
   if (messagesLogged.includes(logMessage)) {
-    debugLog(pA, 'newcode', 1, 'redundant message: "' + logMessage + '"');
+    debugLog(pA, 'newcode', 2, 'redundant message: "' + logMessage + '"');
     return;
   } else {
     debugLog(pA, logTag, logLevel, logMessage);
@@ -1565,7 +1612,7 @@ function debugLogOnce(pA:BigAssFans_i6PlatformAccessory, logTag:string|string[],
 
 function infoLogOnce(pA:BigAssFans_i6PlatformAccessory, logMessage: string) {
   if (messagesLogged.includes(logMessage)) {
-    debugLog(pA, 'newcode', 1, 'redundant message: "' + logMessage + '"');
+    debugLog(pA, 'newcode', 2, 'redundant message: "' + logMessage + '"');
     return;
   } else {
     hbLog.info(logMessage);

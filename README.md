@@ -93,7 +93,7 @@ Example configuration with optional params and multiple fans:
                   {
                     "name": "Big Fan i6",
                     "mac": "20:F8:5E:00:00:00",
-                    "ip": "192.168.1.150",
+                    "ip": "BigFani6.local",
                     "fanAuto": true,
                     "lightAuto": true,
                     "whoosh": false,
@@ -126,19 +126,28 @@ A list of your fans.
 * `name` [required]
 Name of your fan.
 * `ip` [required]
-IP address of your fan.  Can be found in the Big Ass Fans app's Wi-Fi settings screen.
+IP address or hostname of your fan.  IP address can be found in the Big Ass Fans app's Wi-Fi settings screen.
 * `mac` [required]
 MAC address of your fan.  Can be found in the Big Ass Fans app's Wi-Fi settings screen.
 * `whoosh` [optional]
-Adds accessory switch for Whoosh Mode (true/false)
+Adds accessory switch for Whoosh Mode (true/false, defaults to false).
 * `dimToWarm` [optional]
-Adds accessory switch for Dim to Warm (true/false)
+Adds accessory switch for Dim to Warm (true/false, defaults to false).
 * `fanAuto` [optional]
-Adds accessory switch for the fan's Fan Auto mode (true/false)
+Adds accessory switch for the fan's Fan Auto mode (true/false, defaults to false).
 * `lightAuto` [optional]
-Adds accessory switch for the fan's Light Auto mode (true/false)
+Adds accessory switch for the fan's Light Auto mode (true/false, defaults to false).
 * `ecoMode` [optional]
-Adds accessory switch for the fan's Eco mode (true/false)
+Adds accessory switch for the fan's Eco mode (true/false, defaults to false).
+
+#### Advanced Configuration Fields
+
+* `probeFrequency` [optional]
+Sets the frequency that probe messages are sent to the fan.  A frequency 0 milliseconds turns probing off (defaults to 60000).
+
+#### Other Configuration Fields
+* `showTemperture` [optional]
+Can be set to false if you don't want to see the temperature (defaults to true).
 
 ### **Troubleshooting**
 
