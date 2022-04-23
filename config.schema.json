@@ -22,10 +22,10 @@
                 "default": "i6 fan"
             },
             "ip": {
-              "title": "Fan IP address",
-              "description": "The IP address of the fan.",
+              "title": "Fan IP address or hostname",
+              "description": "The IP address or hostname of the fan.",
               "type": "string",
-              "format": "ipv4",
+              "format": "hostname",
               "required": true
             },
             "mac": {
@@ -34,15 +34,21 @@
               "type": "string",
               "required": true
             },
+            "fanModel": {
+              "title": "Fan Model (select one)",
+              "type": "string",
+              "default": "other",
+              "oneOf": [
+                { "title": "i6", "enum": ["i6"] },
+                { "title": "Haiku L Series", "enum": ["Haiku L Series"] },
+                { "title": "Haiku H/I Series", "enum": ["Haiku H/I Series"] },
+                { "title": "Model Not Listed", "enum": ["other"] }
+              ],
+              "required": false
+            },      
             "whoosh": {
               "title": "Whoosh Switch",
               "description": "Add a switch for 'Whoosh Mode'",
-              "type": "boolean",
-              "default": false
-            },
-            "dimToWarm": {
-              "title": "Dim to Warm Switch",
-              "description": "Add a switch for 'Dim to Warm'",
               "type": "boolean",
               "default": false
             },
@@ -57,6 +63,24 @@
               "description": "Add a switch for 'Light Auto'",
               "type": "boolean",
               "default": false
+            },
+            "dimToWarm": {
+              "title": "Dim to Warm Switch",
+              "description": "Add a switch for 'Dim to Warm'",
+              "type": "boolean",
+              "default": false,
+              "condition": {
+                "functionBody": "return model.fans[arrayIndices].fanModel !== 'Haiku L Series' && model.fans[arrayIndices].fanModel !== 'Haiku H/I Series';"
+              }
+            },
+            "ecoMode": {
+              "title": "Eco Mode Switch",
+              "description": "Add a switch for 'Eco to Mode'",
+              "type": "boolean",
+              "default": false,
+              "condition": {
+                "functionBody": "return model.fans[arrayIndices].fanModel !== 'i6';"
+              }
             }
           }
         }  
