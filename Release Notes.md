@@ -1,4 +1,4 @@
-## Release Notes for 0.4.2-beta1
+## Release Notes for 0.4.2
 
 ### Bugs
 Eco Mode Switch had wrong description (Add a switch for 'Dim to Warm’) in configuration UI.
