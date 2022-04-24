@@ -9,4 +9,4 @@ If configuring with *Homebridge UI*, by selecting a fan model, only relevant opt
 
 ### Other
 Changed README and config.schema.json to note a hostname and IP address are interchangeable.<br>
-Added `showTemperature` configuration property for those whoo wish to turn off temperature reporting.
+Added `showTemperature` configuration property for those who wish to turn off temperature reporting.
