@@ -64,10 +64,12 @@ export class BigAssFans_i6PlatformAccessory {
   public Name = 'naamloos';
   public ProbeFrequency = 60000;
 
+  public probeTimeout;
+
   public modelUnknown = true;
   public firmwareUnknown = true;
 
-  public Model = 'unknown model';
+  public Model = 'model not yet established';
   public SSID = 'apname';
   public Firmware = '';
   public OldProtocolFlag:boolean|undefined = undefined;
@@ -144,7 +146,6 @@ export class BigAssFans_i6PlatformAccessory {
       debugLog(this, 'progress',  1, 'set ProbeFrequency to: ' + this.ProbeFrequency);
     }
 
-
     /**
     * set accessory information
     */
@@ -152,8 +153,6 @@ export class BigAssFans_i6PlatformAccessory {
     debugLog(this, 'newcode', 1, 'user supplied model: ' + this.accessory.context.device.fanModel);
     if (this.accessory.context.device.fanModel !== undefined && this.accessory.context.device.fanModel !== 'other') {
       this.Model = this.accessory.context.device.fanModel;
-    } else {
-      this.Model = 'unknown';
     }
 
     const capitalizeName = accessory.context.device.name[0] === accessory.context.device.name[0].toUpperCase();
@@ -163,10 +162,10 @@ export class BigAssFans_i6PlatformAccessory {
     //  from ('*' user, no '*', the fan), but we want the class property to have the 'real' name regardless.
     this.accessory.getService(this.platform.Service.AccessoryInformation)!
       .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Big Ass Fans')
-      .setCharacteristic(this.platform.Characteristic.Model, this.Model + '*')
+      // .setCharacteristic(this.platform.Characteristic.Model, this.Model + '*')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, this.MAC);
 
-    debugLog(this, 'newcode', 1, 'this.Model: ' + this.Model + '*');
+    // debugLog(this, 'newcode', 1, 'this.Model: ' + this.Model + '*');
 
     // Fan
     this.fanService = this.accessory.getService(this.platform.Service.Fan) ||
@@ -212,6 +211,13 @@ export class BigAssFans_i6PlatformAccessory {
       this.temperatureSensorService.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name + accessoryName);
       this.temperatureSensorService.getCharacteristic(this.platform.Characteristic.CurrentTemperature)
         .onGet(this.getCurrentTemperature.bind(this));
+    } else {
+      const service = this.accessory.getService(this.platform.Service.TemperatureSensor);
+      if (service) {
+        this.accessory.removeService(service);
+      } else {
+        debugLog(this, 'newcode', 1, 'service: ' + service);
+      }
     }
 
     // Current Relative Humidity
@@ -409,7 +415,7 @@ export class BigAssFans_i6PlatformAccessory {
       debugLog(this, 'characteristics', 3, 'Set Characteristic RotationSpeed -> ' + (value as number) + '%');
       this.fanStates.RotationSpeed = Math.round(((value as number) / 100) * MAXFANSPEED);
       if (this.fanStates.RotationSpeed > MAXFANSPEED) {
-        hbLog.warn('fan speed > ' + MAXFANSPEED + ': ' + this.fanStates.RotationSpeed + ', setting to ' + MAXFANSPEED);
+        hbLog.warn(this.Name + ' - fan speed > ' + MAXFANSPEED + ': ' + this.fanStates.RotationSpeed + ', setting to ' + MAXFANSPEED);
         this.fanStates.RotationSpeed = MAXFANSPEED;
       }
       b = Buffer.from(ONEBYTEHEADER.concat([0xf0, 0x02, this.fanStates.RotationSpeed, 0xc0]));
@@ -452,7 +458,7 @@ export class BigAssFans_i6PlatformAccessory {
 
   async getColorTemperature(): Promise<CharacteristicValue> {
     const colorTemperature = Math.round(1000000 / this.lightStates.ColorTemperature);
-    debugLog(this, ['newcode', 'characteristics'], [1, 4], 'Get Characteristic ColorTemperature -> ' + colorTemperature);
+    debugLog(this, 'characteristics', 4, 'Get Characteristic ColorTemperature -> ' + colorTemperature);
     return colorTemperature;
   }
 
@@ -558,6 +564,25 @@ export class BigAssFans_i6PlatformAccessory {
 */
 import net = require('net');
 function networkSetup(pA: BigAssFans_i6PlatformAccessory) {
+
+  if (pA.ProbeFrequency !== 0) {
+    // attempt to prevent the occassional socket reset.
+    // sending the mysterious code that the vendor app seems to send once every 15s but I'll go with every minute -  didn't prevent it.
+    // can try going to every 15 seconds like the vendor app seems to do. - didn't work
+    // perhaps I need to call socket.setKeepAlive([enable][, initialDelay]) when I establish it above? - nope, didn't help
+    // obviously, I don't understand this stuff.
+    // now I got an EPIPE 5+ hours after a reset, and repeaated EPIPEs evert minute for the next 7 minutes, then one more after 4 minutes
+    // then clear sailing for 1+ hours so far.
+    pA.probeTimeout = setInterval(( )=> {
+      // debugLog(pA, 'newcode', 1, "probing...");
+      if (pA.client !== undefined) {
+        clientWrite(pA.client, Buffer.from([0xc0, 0x12, 0x04, 0x1a, 0x02, 0x08, 0x03, 0xc0]), pA);
+      } else {
+        debugLog(pA, 'network', 4, 'client undefined in setInterval callback');
+      }
+    }, pA.ProbeFrequency);
+  }
+
   pA.client = net.connect(31415, pA.IP, () => {
     debugLog(pA, 'progress', 2, 'connected!');
     pA.client.setKeepAlive(true);
@@ -568,24 +593,30 @@ function networkSetup(pA: BigAssFans_i6PlatformAccessory) {
   let errHandler;
 
   pA.client.on('error', errHandler = (err) => {
+    let retryMillisconds = 2000;
     if (err.code === 'ECONNRESET') {
-      hbLog.warn(pA.Name + '(' + pA.IP + ')' + ' network connection reset [ECONNRESET]. Attempting reconnect in 2 seconds.');
+      hbLog.warn(pA.Name + ' (' + pA.IP + ')' + ' network connection reset [ECONNRESET].  Attempting reconnect in 2 seconds.');
     } else if (err.code === 'EPIPE') {
-      hbLog.warn(pA.Name + '(' + pA.IP + ')' + ' network connection broke [EPIPE]. Attempting reconnect in 2 seconds.');
+      hbLog.warn(pA.Name + ' (' + pA.IP + ')' + ' network connection broke [EPIPE].  Attempting reconnect in 2 seconds.');
     } else if (err.code === 'ETIMEDOUT') {
-      hbLog.error(pA.Name + '(' + pA.IP + ')' + ' connection timed out [ETIMEDOUT].  '  +
+      hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' connection timed out [ETIMEDOUT].  '  +
         'Check that your fan has power and the correct IP is in json.config.');
       return;
     } else if (err.code === 'ECONNREFUSED') {
-      hbLog.error(pA.Name + '(' + pA.IP + ')' + ' connection refused [ECONNREFUSED].  '  +
-          'Check that the correct IP is in json.config.');
+      hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' connection refused [ECONNREFUSED].  Check that the correct IP is in json.config.');
+      if (pA.probeTimeout !== undefined) {
+        debugLog(pA, 'newcode', 1, 'clearInterval timer');
+        clearInterval(pA.probeTimeout);
+      }
       return;
     } else if (err.code === 'ENETUNREACH') {
-      hbLog.error(pA.Name + '(' + pA.IP + ')' + ' is unreachable [ENETUNREACH].  ' +
-            'Check the correct IP is in json.config.');
+      hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' is unreachable [ENETUNREACH].  Check the correct IP is in json.config.');
       return;
+    } else if (err.code === 'EHOSTDOWN') {
+      hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' connection problem [EHOSTDOWN].  Attempting reconnect in one minute.');
+      retryMillisconds = 60000;
     } else {
-      hbLog.warn(pA.Name + '(' + pA.IP + ')' + ': Unhandled network error: ' + err.code + '.  Attempting reconnect in 2 seconds.');
+      hbLog.warn(pA.Name + ' (' + pA.IP + ')' + ': Unhandled network error: ' + err.code + '.  Attempting reconnect in 2 seconds.');
     }
     pA.client = undefined;
     setTimeout(() => {
@@ -599,7 +630,7 @@ function networkSetup(pA: BigAssFans_i6PlatformAccessory) {
       pA.client.on('data', (data) => {
         onData(pA, data);
       });
-    }, 2000);
+    }, retryMillisconds);
   });
 
   /**
@@ -615,33 +646,17 @@ function networkSetup(pA: BigAssFans_i6PlatformAccessory) {
       debugLog(pA, 'network', 1, msgString);
 
       if (oldFlag === false && pA.OldProtocolFlag === true) {
-        debugLog(pA, 'redflag', 1, 'succeeded: OldProtocolFlag flipped to true');
+        debugLog(pA, 'redflags', 1, 'succeeded: OldProtocolFlag flipped to true');
       }
     }
     onData(pA, data);
   });
 
-  if (pA.ProbeFrequency !== 0) {
-    // attempt to prevent the occassional socket reset.
-    // sending the mysterious code that the vendor app seems to send once every 15s but I'll go with every minute -  didn't prevent it.
-    // can try going to every 15 seconds like the vendor app seems to do. - didn't work
-    // perhaps I need to call socket.setKeepAlive([enable][, initialDelay]) when I establish it above? - nope, didn't help
-    // obviously, I don't understand this stuff.
-    // now I got an EPIPE 5+ hours after a reset, and repeaated EPIPEs evert minute for the next 7 minutes, then one more after 4 minutes
-    // then clear sailing for 1+ hours so far.
-    setInterval(( )=> {
-      if (pA.client !== undefined) {
-        clientWrite(pA.client, Buffer.from([0xc0, 0x12, 0x04, 0x1a, 0x02, 0x08, 0x03, 0xc0]), pA);
-      } else {
-        debugLog(pA, 'network', 4, 'client undefined in setInterval callback');
-      }
-    }, pA.ProbeFrequency);
-  }
 }
 
-function onData(platformAccessory: BigAssFans_i6PlatformAccessory, data: Buffer) {
-  debugLog(platformAccessory, 'network', 12, 'raw (stuffed) data: ' + hexFormat(data));
-  debugLog(platformAccessory, 'network', 8, 'accessory client got: ' + data.length + (data.length === 1 ? ' byte' : ' bytes'));
+function onData(pA: BigAssFans_i6PlatformAccessory, data: Buffer) {
+  debugLog(pA, 'network', 13, 'raw (stuffed) data: ' + hexFormat(data));
+  debugLog(pA, 'network', 8, 'accessory client got: ' + data.length + (data.length === 1 ? ' byte' : ' bytes'));
 
   // break data into individual chunks bracketed by 0xc0
   let startIndex = -1;
@@ -656,29 +671,29 @@ function onData(platformAccessory: BigAssFans_i6PlatformAccessory, data: Buffer)
       } else {
         endIndex = i;
         chunks[numChunks] = data.subarray(startIndex, endIndex+1);
-        //  hbLog.debug('start: ' + startIndex + ', end: ' + endIndex + ', length: ' + chunks[numChunks].length);
+        // hbLog.debug(platformAccessory.Name + ' - start: ' + startIndex + ', end: ' + endIndex + ', length: ' + chunks[numChunks].length);
         numChunks++;
         startIndex = -1;
       }
     }
   }
-  debugLog(platformAccessory, 'network', 11, 'raw (unstuffed) data: ' + hexFormat(unstuff(data, platformAccessory)));
+  debugLog(pA, 'network', 11, 'raw (unstuffed) data: ' + hexFormat(unstuff(data, pA)));
 
   let messageArray:string[][];
   for (let i = 0; i < numChunks; i++) {
-    messageArray = preProcess(platformAccessory, unstuff(chunks[i], platformAccessory));
+    messageArray = preProcess(pA, unstuff(chunks[i], pA));
 
     messageArray.sort(sortFunction);
     for (let j = 0; j < messageArray.length; j++) {
-      debugLog(platformAccessory, 'newcode', 10, 'handle: ' + messageArray[j][0]);
-      debugLog(platformAccessory, 'newcode', 12, 'handle: ' + messageArray[j]);
+      debugLog(pA, 'newcode', 10, 'handle: ' + messageArray[j][0]);
+      debugLog(pA, 'newcode', 12, 'handle: ' + messageArray[j]);
 
-      const propertyHandlerFunction = platformAccessory.propertiesTable[messageArray[j][0]][PROPERTYHANDLERFUNCTION];
+      const propertyHandlerFunction = pA.propertiesTable[messageArray[j][0]][PROPERTYHANDLERFUNCTION];
       if (propertyHandlerFunction === undefined) {
-        hbLog.warn('undefined handler for:', messageArray[j][0]);
+        hbLog.warn(pA.Name + ' - undefined handler for:', messageArray[j][0]);
         continue;
       }
-      propertyHandlerFunction(messageArray[j][1], platformAccessory, messageArray[j][0]);
+      propertyHandlerFunction(messageArray[j][1], pA, messageArray[j][0]);
     }
   }
 }
@@ -691,12 +706,12 @@ function sortFunction(a, b) {
   }
 }
 
-function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typeof Buffer):string[][] {
+function preProcess(pA: BigAssFans_i6PlatformAccessory, data: typeof Buffer):string[][] {
   let len = 0;
   let propertyFields: typeof Buffer;
 
   const rawChunk = data;  // data buffer gets modified as we go along.  rawChunk is a copy of the unmodified buffer
-  debugLog(platformAccessory, 'network', 12, 'dbg1: ' + hexFormat(rawChunk));
+  debugLog(pA, 'network', 12, 'dbg1: ' + hexFormat(rawChunk));
 
   // dealing with a protocol ambiguity (or my ignorance)
   // first byte is 0xc0
@@ -734,43 +749,43 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
   //   4) that size plus remainingChunkSize + 1 (terminating 0xc0) == data.length
 
   if (data[0] !== 0xc0) {
-    hbLog.warn('expected start of message chunk (0x0c), got: ' + hexFormat(data[0]));
-    debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
+    hbLog.warn(pA.Name + ' - expected start of message chunk (0x0c), got: ' + hexFormat(data[0]));
+    debugLog(pA, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
     return [];
   }
   data = data.subarray(1); // remove 0xc0
 
   if (data[0] !== 0x12) {
-    hbLog.warn('expected start of message header (0x12 or 0x1a), got: ' + hexFormat(data[0]));
-    debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
+    hbLog.warn(pA.Name + ' - expected start of message header (0x12 or 0x1a), got: ' + hexFormat(data[0]));
+    debugLog(pA, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
     return [];
   }
   data = data.subarray(1); // remove 0x12
 
   // accumulate remaining size (bigAssNumber)
   let banArray:number[] = [];
-  while (data.length > 0 && data[0] !== 0x22) { // field separator
+  do { // the Big Assed Number maybe be the same value as a "separator" byte (0x22), ergo do...while
     banArray.push(data[0]);
     data = data.subarray(1); // remove the byte we just consumed
-  }
+  }  while (data.length > 0 && data[0] !== 0x22);
   const remainingChunkSize = bigAssNumber(Buffer.from(banArray));
 
   if (data.length !== (remainingChunkSize + 1)) { // add in the 0xc0
-    hbLog.warn('this is not the chunk size we\'re looking for: ' + remainingChunkSize + ', actual: ' + data.length);
-    debugLog(platformAccessory, 'network', 1, 'rawChunk: ' + hexFormat(rawChunk));
-    debugLog(platformAccessory, 'network', 1, 'data remaining: ' + hexFormat(data));
+    hbLog.warn(pA.Name + ' - this is not the chunk size we\'re looking for: ' + remainingChunkSize + ', actual: ' + data.length);
+    debugLog(pA, 'network', 1, 'rawChunk: ' + hexFormat(rawChunk));
+    debugLog(pA, 'network', 1, 'data remaining: ' + hexFormat(data));
     return [];
   }
   if (data.length === 0 || data[0] !== 0x22) {
-    hbLog.warn('not good.  apparently we ran off the end of the data buffer');
-    debugLog(platformAccessory, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
+    hbLog.warn(pA.Name + ' - not good.  apparently we ran off the end of the data buffer');
+    debugLog(pA, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
     return [];
   }
   data = data.subarray(1); // remove the field separator (0x22)
 
   // if it's the new (circa 4/4/2022) Haiku firmware then the mystery (token?) data at the end of the chunk isn't present
 
-  const tokenLength = platformAccessory.OldProtocolFlag ? 72 : 0;
+  const tokenLength = pA.OldProtocolFlag ? 72 : 0;
 
   let chunkSizeSansToken:number;
   // let ignoredBytes = 0;
@@ -778,20 +793,21 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
   // data[0] is remaining chunk size
   // data[1] is 0x12 or 0x1a
   // data[2] is size of 1st (and only) property message
-  // ((data[0] - data[2]) === 2) // starting byte (0x1a) terminating byte (0xc0)
-  // (data.length == data[2] + tokenLength + 4) // +4: <chunkSizeSansToken byte> + 0x1a + data[2] byte + 0xc0
-
-  // if (remainingChunkSize === (data[2] + 2) + tokenLength + 2) {
-  //   debugLog(platformAccessory, 'newcode', 1, 'solo!')
-  // }
+  // ((data[0] - data[2]) === 2) // "=== 2" is starting byte (0x1a or 0x12) terminating byte (0xc0)
+  // (data.length == data[2] + tokenLength + 4) // +4: <chunkSizeSansToken byte> + 0x1a or ox12 + data[2] byte + 0xc0
 
   if (data.length === (data[2] + tokenLength + 4))  { // this is the sole message in the chunk
+    const soleMessage = hexFormat(data.subarray(1, data[0]+1));
     if (data[1] !== 0x1a) {
       if (data[1] === 0x12) { // we're going to skip the sole message, therefore we're skipping the entire chunk
-        debugLogOnce(platformAccessory, 'redflags', 2, 'ignoring chunk with sole message: ' + hexFormat(data.subarray(1, data[0]+1)));
+        debugLogOnce(pA, 'redflags', 2, 'ignoring chunk with sole message: ' + soleMessage);
         return [];
       }
-      debugLog(platformAccessory, 'redflags', 1, 'sole message in a chunk is not 0x1a or 0x12, but rather: ' + hexFormat(data[1]));
+      debugLog(pA, 'redflags', 1, 'sole message in a chunk is not 0x1a or 0x12, but rather: ' + hexFormat(data[1]));
+    } else { // it's a scheduling message
+      // ignore it.
+      debugLogOnce(pA, 'redflags', 2, 'ignoring chunk with sole  scheduling message: ' + soleMessage);
+      return [];
     }
 
     chunkSizeSansToken = data[0] + 2; // +1 for the 0x12 we're going to insert at the beginning, and 1 for the final 0xc0
@@ -812,16 +828,17 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
   // this assertion about the remaining data length may be entirely unnecessary
   if (data.length !== assumedChunkSize) {
     if (data.length === (assumedChunkSize + 72)) {
-      debugLog(platformAccessory, 'redflags', 1, 'would be chunkSizeSansToken warning averted');
-      if (platformAccessory.OldProtocolFlag === undefined) {
-        debugLog(platformAccessory, 'redflags', 1, 'platformAccessory.OldProtocolFlag === undefined');
+      debugLog(pA, 'redflags', 1, 'would be chunkSizeSansToken warning averted');
+      if (pA.OldProtocolFlag === undefined) {
+        debugLog(pA, 'redflags', 1, 'platformAccessory.OldProtocolFlag === undefined');
       } else {
-        debugLog(platformAccessory, 'redflags', 1, 'OldProtocolFlag: ' + platformAccessory.OldProtocolFlag);
+        debugLog(pA, 'redflags', 1, 'OldProtocolFlag: ' + pA.OldProtocolFlag);
       }
     } else {
-      hbLog.warn('chunkSizeSansToken: ' + assumedChunkSize + ', not what we expected with data length: ' + data.length);
-      debugLog(platformAccessory, 'redflags', 1, 'OldProtocolFlag: ' + platformAccessory.OldProtocolFlag);
-      debugLog(platformAccessory, 'redflags', 1, 'rawChunk: ' + hexFormat(rawChunk));
+      hbLog.warn(pA.Name + ' - chunkSizeSansToken: ' + assumedChunkSize + ', not what we expected with data length: '
+          + data.length);
+      debugLog(pA, 'redflags', 1, 'OldProtocolFlag: ' + pA.OldProtocolFlag);
+      debugLog(pA, 'redflags', 1, 'rawChunk: ' + hexFormat(rawChunk));
 
       return [];
     }
@@ -837,12 +854,12 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
       if (data.length === 73) {
         return processedMessageArray;
       } else {
-        debugLog(platformAccessory, 'redflags', 3, 'surprise! token length was: ' + data.length);
+        debugLog(pA, 'redflags', 3, 'surprise! token length was: ' + data.length);
       }
     }
     if (data[0] !== 0x12) {
-      hbLog.warn('expected 0x12, got: ', hexFormat(data.subarray(0, 1)));
-      debugLog(platformAccessory, 'redflags', 3, 'unexpected byte in chunk:  ' + hexFormat(data) + ' from: ' + hexFormat(rawChunk));
+      hbLog.warn(pA.Name + ' - expected 0x12, got: ', hexFormat(data.subarray(0, 1)));
+      debugLog(pA, 'redflags', 3, 'unexpected byte in chunk:  ' + hexFormat(data) + ' from: ' + hexFormat(rawChunk));
       return processedMessageArray;
     }
     data = data.subarray(1);  // remove the 'start of header' (0x12) from the remaining data
@@ -854,38 +871,38 @@ function preProcess(platformAccessory: BigAssFans_i6PlatformAccessory, data: typ
     data = data.subarray(len);  // remove the message from the remaining data
 
     let hdrsize = 2; // most property headers are two bytes
-    if (platformAccessory.oneByteHeaders.includes(propertyFields[0])) {
+    if (pA.oneByteHeaders.includes(propertyFields[0])) {
       hdrsize = 1;
     }
 
     const propertyCodeString = hexFormat(propertyFields.subarray(0, hdrsize));
     const propertyValueField = propertyFields.subarray(hdrsize);
 
-    if (platformAccessory.propertiesTable[propertyCodeString] === undefined) {
-      hbLog.warn('propertiesTable[' + propertyCodeString + '] === undefined');
+    if (pA.propertiesTable[propertyCodeString] === undefined) {
+      hbLog.warn(pA.Name + ' - propertiesTable[' + propertyCodeString + '] === undefined');
       continue;
     }
 
-    const decodeValueFunction = platformAccessory.propertiesTable[propertyCodeString][DECODEVALUEFUNCTION];
+    const decodeValueFunction = pA.propertiesTable[propertyCodeString][DECODEVALUEFUNCTION];
     if (decodeValueFunction === undefined) {
-      hbLog.warn('No value decoding function for: ', propertyCodeString);
+      hbLog.warn(pA.Name + ' - No value decoding function for: ', propertyCodeString);
     }
 
     // the propertiesTable declaration for the decode value functions to have platform accessory and string arguments.
     // we pass the arguments whether or not a given function requires them just in case we want to, for example, add a debugLog call
     // in a given function.
-    const decodedValue = decodeValueFunction(propertyValueField, platformAccessory, 'noop');
+    const decodedValue = decodeValueFunction(propertyValueField, pA, 'noop');
     if (decodedValue === undefined) {
-      hbLog.warn('Could not decode value for: ', propertyCodeString);
+      hbLog.warn(pA.Name + ' - Could not decode value for: ', propertyCodeString);
       continue;
     }
 
     // some unknown codes might be under surveillance - check if this is one of them?
-    codeWatch(propertyCodeString, decodedValue, propertyValueField, platformAccessory);
+    codeWatch(propertyCodeString, decodedValue, propertyValueField, pA);
 
-    const propertyHandlerFunction = platformAccessory.propertiesTable[propertyCodeString][PROPERTYHANDLERFUNCTION];
+    const propertyHandlerFunction = pA.propertiesTable[propertyCodeString][PROPERTYHANDLERFUNCTION];
     if (propertyHandlerFunction === undefined) {
-      hbLog.warn('undefined handler for:', propertyCodeString);
+      hbLog.warn(pA.Name + ' - undefined handler for:', propertyCodeString);
       continue;
     }
 
@@ -1024,13 +1041,15 @@ function getPropertiesArray():typeof properties {
 */
 
 function capabilities(value: string, pA:BigAssFans_i6PlatformAccessory) {
-  // it's a stretch to think I can parse this.  So far I've only seen it on Haikus
+  // it's a stretch to think I can parse this, so we'll just brute force it.  I've only seen this '0x8a, 0x01' property sequence on Haikus.
+
   // wojo fan with light
   // 0x12, 0x11, 0x8a, 0x01, 0x0e, 0x08, 0x01, 0x18, 0x01, 0x20, 0x01, 0x38, 0x01, 0x48, 0x01, 0x50, 0x01, 0x70, 0x01
   // wojo fan without light
   // 0x12, 0x0f, 0x8a, 0x01, 0x0c, 0x08, 0x01, 0x18, 0x01, 0x38, 0x01, 0x48, 0x01, 0x50, 0x01, 0x70, 0x01
   // Klidec
   // 0x12, 0x11, 0x8a, 0x01, 0x0e, 0x08, 0x01, 0x18, 0x01, 0x20, 0x01, 0x38, 0x01, 0x48, 0x01, 0x50, 0x01, 0x70, 0x01,
+
   if (value.indexOf('0x20, 0x01') === -1) {
     infoLogOnce(pA, 'no light detected');
     const service = pA.accessory.getService(pA.platform.Service.Lightbulb);
@@ -1084,7 +1103,9 @@ function getModel(value: string, pA:BigAssFans_i6PlatformAccessory) {
       const service = pA.accessory.getService(pA.platform.Service.TemperatureSensor);
       if (service) {
         pA.accessory.removeService(service);
-        debugLog(pA, 'newcode', 2, 'no TemperatureSensor service for model "' + pA.Model + '"');
+        debugLog(pA, 'newcode', 1, 'no TemperatureSensor service for model "' + pA.Model + '"');
+      } else {
+        debugLog(pA, 'newcode', 1, 'service: ' + service);
       }
     }
   }
@@ -1133,13 +1154,15 @@ function noopToken(value: string, pA:BigAssFans_i6PlatformAccessory) {
   debugLog(pA, 'noopcodes', 3, 'token: ' + value);
 }
 
-
 function lightColorTemperature(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
-  // some fans don't have ColorTemperature capability but they still send (static) values, should change propertyTable to call noop instead
+  if (!pA.accessory.getService(pA.platform.Service.Lightbulb)) {
+    debugLog(pA, 'newcode', 1, 'no lightBulbService');
+    return;
+  }
   if (pA.Model !== MODEL_HAIKU_HI && pA.Model !== MODEL_HAIKU_L) {
     const mireds = Math.round(1000000 / pA.lightStates.ColorTemperature);
     pA.lightStates.ColorTemperature = Number(value);
-    debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update ColorTemperature: ' + mireds);
+    debugLog(pA, 'characteristics', 3, 'update ColorTemperature: ' + mireds);
     pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.ColorTemperature, mireds);
   } else {
     debugLog(pA, 'newcode', 1, 'ColorTemperature: ignored');
@@ -1266,21 +1289,20 @@ function fanRotationSpeed(value: number|string, pA:BigAssFans_i6PlatformAccessor
 }
 
 function currentTemperature(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
+  if (pA.accessory.getService(pA.platform.Service.TemperatureSensor) === undefined) {
+    return;
+  }
   if (pA.accessory.context.device.showTemperature !== undefined && pA.accessory.context.device.showTemperature === false) {
-    // should really replace this function with noop in property table in this case
     debugLog(pA, 'newcode', 1, 'ignoring temperature');
     return;
   }
 
   if (value < -270 || value > 100) {
     // Haiku L doesn't seem to support the temperature sensor, it just reports 1000º.  ignore it
-    // should replace this function with noop in property table
-
     if (value === 1000) {
       infoLogOnce(pA, 'current temperature out of range: ' + value + ', assuming no temperature sensor for model "' + pA.Model + '"');
-      return;
     } else {
-      hbLog.info('current temperature out of range: ' + value + ', ignored');
+      hbLog.info(pA.Name + ' - current temperature out of range: ' + value + ', ignored');
     }
     return;
   }
@@ -1297,10 +1319,10 @@ function currentRelativeHumidity(value: number|string, pA:BigAssFans_i6PlatformA
     // Haikus don't seem to support the humidity sensor, they just report 1000%.  ignore it
     // should replace this function with noop in property table
     if (value === 1000) {
-      infoLogOnce(pA, 'Assuming no humidity sensor for model "' + pA.Model + '"');
+      infoLogOnce(pA, 'current relative humidity out of range: ' + value + ', assuming no humidity sensor for model "' + pA.Model + '"');
       return;
     } else {
-      hbLog.info('current relative humidity out of range: ' + value + ', ignored');
+      hbLog.info(pA.Name + ' - current relative humidity out of range: ' + value + ', ignored');
     }
     return;
   }
@@ -1363,7 +1385,7 @@ function mysteryCode(value: string, pA:BigAssFans_i6PlatformAccessory, code: str
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function testValue(bytes:Buffer): number|string {
-  hbLog.debug('testValue(' + hexFormat(bytes) + ')');
+  hbLog.debug('some fan' + ' - testValue(' + hexFormat(bytes) + ')');
   return('test');
 }
 
@@ -1374,7 +1396,7 @@ function onOffAutoValue(bytes:Buffer): number|string|undefined {
     case 0x02: // auto is on fan may or may not be spinning
       return (bytes[0]);
     default:
-      hbLog.warn('unknown value for \'on|off|auto\': ', hexFormat(bytes));
+      hbLog.warn('some fan' + ' - unknown value for \'on|off|auto\': ', hexFormat(bytes));
       return undefined;
   }
 }
@@ -1385,7 +1407,7 @@ function boolValue(bytes:Buffer): number|string|undefined {
     case 0x01:
       return(bytes[0]);
     default:
-      hbLog.warn('unknown value for "on|off" or "direction": ' + hexFormat(bytes));
+      hbLog.warn('some fan' + ' - unknown value for "on|off" or "direction": ' + hexFormat(bytes));
       return undefined;
   }
 }
@@ -1617,7 +1639,7 @@ function infoLogOnce(pA:BigAssFans_i6PlatformAccessory, logMessage: string) {
     debugLog(pA, 'newcode', 2, 'redundant message: "' + logMessage + '"');
     return;
   } else {
-    hbLog.info(logMessage);
+    hbLog.info(pA.Name + ' - ' + logMessage);
     messagesLogged.push(logMessage);
   }
 }
@@ -1628,6 +1650,6 @@ function clientWrite(client, b, pA:BigAssFans_i6PlatformAccessory) {
     client.write(b);
   } catch {
     // hbLog.warn('clientWrite(' + client + ', ' + b.toString('hex') + ') failed');
-    hbLog.warn('clientWrite(..., ' + b.toString('hex') + ') failed');
+    hbLog.warn(pA.Name + ' - clientWrite(..., ' + b.toString('hex') + ') failed');
   }
 }
