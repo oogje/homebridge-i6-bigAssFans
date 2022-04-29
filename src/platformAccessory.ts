@@ -940,7 +940,7 @@ function getPropertiesArray():typeof properties {
   properties['0x88, 0x02'] = [intValue,       mysteryCode];             //  mystery
   properties['0x88, 0x03'] = [intValue,       mysteryCode];             //  mystery
   properties['0x88, 0x04'] = [intValue,       ecoModeOnState];          //  eco mode (haiku)
-  properties['0x8a, 0x01'] = [dataValue,      capabilities];            //  mystery (haiku)
+  properties['0x8a, 0x01'] = [dataValue,      capabilities];            //  mystery includes bulb present flag (haiku)
   properties['0x90, 0x03'] = [intValue,       noop];                    //  comfort min speed
   properties['0x90, 0x05'] = [intValue,       mysteryCode];             //  mystery (haiku)
   properties['0x9a, 0x05'] = [dataValue,      mysteryCode];             //  mystery (haiku)
@@ -964,7 +964,7 @@ function getPropertiesArray():typeof properties {
   properties['0xb8, 0x09'] = [intValue,       mysteryCode];             //  mystery
   properties['0xc0, 0x01'] = [intValue,       mysteryCode];             //  mystery
   properties['0xc0, 0x04'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xc0, 0x08'] = [intValue,       mysteryCode];             //  mystery
+  properties['0xc0, 0x08'] = [intValue,       mysteryCode];             //  mystery [legacy remote enable - haiku only]?
   properties['0xc2, 0x03'] = [textValue,      mysteryCode];             //  mystery
   properties['0xc2, 0x07'] = [textValue,      noop];                    //  IP address
   properties['0xc2, 0x09'] = [dataValue,      mysteryCode];             //  mystery MAC address with or w/o firmware versions (text6/text7)
@@ -1165,7 +1165,7 @@ function lightColorTemperature(value: number|string, pA:BigAssFans_i6PlatformAcc
     debugLog(pA, 'characteristics', 3, 'update ColorTemperature: ' + mireds);
     pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.ColorTemperature, mireds);
   } else {
-    debugLog(pA, 'newcode', 1, 'ColorTemperature: ignored');
+    // debugLog(pA, 'newcode', 1, 'ColorTemperature: ignored');
   }
 }
 
@@ -1492,13 +1492,13 @@ function dataValue(bytes:Buffer): string {
 // a little hack for codes under investigation
 function codeWatch(s: string, v: string|number|Buffer, m: Buffer, pA:BigAssFans_i6PlatformAccessory) {
   if (s === '0xe8, 0x01') {
-    debugLog(pA, 'cluing', 4, 'code watch - s: ' + s + ', m: ' + hexFormat(m));
+    debugLog(pA, 'cluing', 5, 'code watch - s: ' + s + ', m: ' + hexFormat(m));
   } if (s === '0xd8, 0x01') {
-    debugLog(pA, 'cluing', 4, 'code watch - s: ' + s + ', m: ' + hexFormat(m));
+    debugLog(pA, 'cluing', 5, 'code watch - s: ' + s + ', m: ' + hexFormat(m));
   } else if (s === '0x18, 0xc0') {
-    debugLog(pA, 'cluing', 4, 'code watch - s: ' + s + ', m: ' + hexFormat(m));
+    debugLog(pA, 'cluing', 5, 'code watch - s: ' + s + ', m: ' + hexFormat(m));
   } else if (s === '0xda, 0x0a') {
-    debugLog(pA, 'cluing', 4, 'code watch - s: ' + s + ', v: ' + hexFormat(v));
+    debugLog(pA, 'cluing', 5, 'code watch - s: ' + s + ', v: ' + hexFormat(v));
   }
 }
 
@@ -1632,7 +1632,6 @@ function debugLogOnce(pA:BigAssFans_i6PlatformAccessory, logTag:string|string[],
     messagesLogged.push(logMessage);
   }
 }
-
 
 function infoLogOnce(pA:BigAssFans_i6PlatformAccessory, logMessage: string) {
   if (messagesLogged.includes(logMessage)) {
