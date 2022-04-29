@@ -1,6 +1,6 @@
 ## Release Notes 
 
-## 0.4.3-beta1
+## v0.4.3
 
 ### Bugs
 Handle case where the length of a message was 0x22 bytes (as when a group name was exactly seven characters long).  Issue #8
@@ -11,7 +11,7 @@ Fix debugLogs tag typo.
 ### Other
 Include fan name in more log messages.
 
-## 0.4.2
+## v0.4.2
 
 ### Bugs
 Eco Mode Switch had wrong description (Add a switch for 'Dim to Warm’) in configuration UI.  
