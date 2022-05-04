@@ -10,10 +10,6 @@ let hbLog: Logger;
 
 const MAXFANSPEED = 7;
 
-// property table columns
-const DECODEVALUEFUNCTION = 0;
-const PROPERTYHANDLERFUNCTION = 1;
-
 const ONEBYTEHEADER = [0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03];
 
 const MODEL_i6 =       'i6';
@@ -85,11 +81,6 @@ export class BigAssFans_i6PlatformAccessory {
 
 
   mysteryProperties: string|number[] = [];  // to keep track of when they change - for hints to eventually figure out what they mean
-  /**
-  * propertiesTable is a two-dimensional array indexed by a string representation of the fan status codes.
-  * each sub-array contains a value decoder function and a handler function to act on that value per the property code.
-  */
-  propertiesTable = getPropertiesArray();
 
   constructor(
     public readonly platform: BigAssFans_i6Platform,
@@ -99,13 +90,6 @@ export class BigAssFans_i6PlatformAccessory {
     this.IP = accessory.context.device.ip;
     this.MAC = accessory.context.device.mac;
     this.Name = accessory.context.device.name;
-
-    for (const hdr in this.propertiesTable) {
-      const a = hdr.split(',');
-      if (a.length === 1) {
-        this.oneByteHeaders.push(parseInt(hdr));
-      }
-    }
 
     // defaults and enumeration of debugging keys
     this.debugLevels['light'] = 0;
@@ -126,18 +110,43 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     if (accessory.context.device.whoosh) {
+      hbLog.warn('use of "whoosh" configuration attribute is deprecated, please use "showWhooshSwitch" instead');
+      this.showWhooshSwitch = true;
+    }
+    if (accessory.context.device.showWhooshSwitch) {
       this.showWhooshSwitch = true; // defaults to false in property initialization
     }
+
     if (accessory.context.device.dimToWarm) {
+      hbLog.warn('use of "dimToWarm" configuration attribute is deprecated, please use "showDimToWarmSwitch" instead');
+      this.showDimToWarmSwitch = true;
+    }
+    if (accessory.context.device.showDimToWarmSwitch) {
       this.showDimToWarmSwitch = true; // defaults to false in property initialization
     }
+
     if (accessory.context.device.fanAuto) {
+      hbLog.warn('use of "fanAuto" configuration attribute is deprecated, please use "showFanAutoSwitch" instead');
+      this.showFanAutoSwitch = true;
+    }
+    if (accessory.context.device.showFanAutoSwitch) {
       this.showFanAutoSwitch = true; // defaults to false in property initialization
     }
+
+
     if (accessory.context.device.lightAuto) {
+      hbLog.warn('use of "lightAuto" configuration attribute is deprecated, please use "showLightAutoSwitch" instead');
+      this.showLightAutoSwitch = true;
+    }
+    if (accessory.context.device.showLightAutoSwitch) {
       this.showLightAutoSwitch = true; // defaults to false in property initialization
     }
+
     if (accessory.context.device.ecoMode) {
+      hbLog.warn('use of "ecoMode" configuration attribute is deprecated, please use "showEcoModeSwitch" instead');
+      this.showEcoModeSwitch = true;
+    }
+    if (accessory.context.device.showEcoModeSwitch) {
       this.showEcoModeSwitch = true;  // defaults to false in property initialization
     }
 
@@ -158,14 +167,9 @@ export class BigAssFans_i6PlatformAccessory {
     const capitalizeName = accessory.context.device.name[0] === accessory.context.device.name[0].toUpperCase();
     let accessoryName:string;
 
-    // why the '*' in the model characteristic, but not in this.model? it's cosmetic to indicate where the model name came
-    //  from ('*' user, no '*', the fan), but we want the class property to have the 'real' name regardless.
     this.accessory.getService(this.platform.Service.AccessoryInformation)!
       .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Big Ass Fans')
-      // .setCharacteristic(this.platform.Characteristic.Model, this.Model + '*')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, this.MAC);
-
-    // debugLog(this, 'newcode', 1, 'this.Model: ' + this.Model + '*');
 
     // Fan
     this.fanService = this.accessory.getService(this.platform.Service.Fan) ||
@@ -448,17 +452,19 @@ export class BigAssFans_i6PlatformAccessory {
 
   // Mireds!
   async setColorTemperature(value: CharacteristicValue) {
-    debugLog(this, ['newcode', 'characteristics'], [1, 3], 'Set Characteristic ColorTemperature  -> ' + value);
+    // should maybe limit color temp to one of 5 BAF supported values - 2200, 2700, 4000, 5000, 6500?
     this.lightStates.ColorTemperature = Math.round(1000000/(value as number));
-    const bigNumberArray = stuffed(makeBigAssNumberValues(this.lightStates.ColorTemperature));
-    const firstPart = [0xc0, 0x12, bigNumberArray.length + 6, 0x12, bigNumberArray.length + 4, 0x1a,
-      bigNumberArray.length + 2, 0xb8, 0x04];
-    clientWrite(this.client, Buffer.from(firstPart.concat(bigNumberArray, 0xc0)), this);
+    debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic ColorTemperature  -> ' + value +
+        ' (' + this.lightStates.ColorTemperature + ')');
+    const stuffedVarInt = stuff(varint_encode(this.lightStates.ColorTemperature));
+    const firstPart = [0xc0, 0x12, stuffedVarInt.length + 6, 0x12, stuffedVarInt.length + 4, 0x1a, stuffedVarInt.length + 2, 0xb8, 0x04];
+    clientWrite(this.client, Buffer.from(firstPart.concat(stuffedVarInt, 0xc0)), this);
   }
 
   async getColorTemperature(): Promise<CharacteristicValue> {
     const colorTemperature = Math.round(1000000 / this.lightStates.ColorTemperature);
-    debugLog(this, 'characteristics', 4, 'Get Characteristic ColorTemperature -> ' + colorTemperature);
+    debugLog(this, ['light', 'characteristics'], [1, 4], 'Get Characteristic ColorTemperature -> ' + colorTemperature +
+        ' (' + this.lightStates.ColorTemperature + ')');
     return colorTemperature;
   }
 
@@ -563,6 +569,7 @@ export class BigAssFans_i6PlatformAccessory {
 * connect to the fan, send an initialization message, establish the error and data callbacks and start a keep-alive interval timer.
 */
 import net = require('net');
+
 function networkSetup(pA: BigAssFans_i6PlatformAccessory) {
 
   if (pA.ProbeFrequency !== 0) {
@@ -671,33 +678,26 @@ function onData(pA: BigAssFans_i6PlatformAccessory, data: Buffer) {
       } else {
         endIndex = i;
         chunks[numChunks] = data.subarray(startIndex, endIndex+1);
-        // hbLog.debug(platformAccessory.Name + ' - start: ' + startIndex + ', end: ' + endIndex + ', length: ' + chunks[numChunks].length);
         numChunks++;
         startIndex = -1;
       }
     }
   }
-  debugLog(pA, 'network', 11, 'raw (unstuffed) data: ' + hexFormat(unstuff(data, pA)));
 
-  let messageArray:string[][];
   for (let i = 0; i < numChunks; i++) {
-    messageArray = preProcess(pA, unstuff(chunks[i], pA));
-
-    messageArray.sort(sortFunction);
-    for (let j = 0; j < messageArray.length; j++) {
-      debugLog(pA, 'newcode', 10, 'handle: ' + messageArray[j][0]);
-      debugLog(pA, 'newcode', 12, 'handle: ' + messageArray[j]);
-
-      const propertyHandlerFunction = pA.propertiesTable[messageArray[j][0]][PROPERTYHANDLERFUNCTION];
-      if (propertyHandlerFunction === undefined) {
-        hbLog.warn(pA.Name + ' - undefined handler for:', messageArray[j][0]);
-        continue;
-      }
-      propertyHandlerFunction(messageArray[j][1], pA, messageArray[j][0]);
+    if (chunks[i][0] !== 0xc0 || chunks[i][chunks[i].length-1] !== 0xc0) {
+      debugLog(pA, 'redflags', 1, 'unbracketed chunk');
+      return;
+    } else {
+      chunks[i] = chunks[i].subarray(1, chunks[i].length-1);
     }
+
+    debugLog(pA, 'network', 11, 'raw (unstuffed) chunks[' + i + ']: ' + hexFormat(unstuff(chunks[i])));
+    doChunk(unstuff(chunks[i]), pA);
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function sortFunction(a, b) {
   if (a[0] === b[0]) {
     return 0;
@@ -706,363 +706,23 @@ function sortFunction(a, b) {
   }
 }
 
-function preProcess(pA: BigAssFans_i6PlatformAccessory, data: typeof Buffer):string[][] {
-  let len = 0;
-  let propertyFields: typeof Buffer;
-
-  const rawChunk = data;  // data buffer gets modified as we go along.  rawChunk is a copy of the unmodified buffer
-  debugLog(pA, 'network', 12, 'dbg1: ' + hexFormat(rawChunk));
-
-  // dealing with a protocol ambiguity (or my ignorance)
-  // first byte is 0xc0
-  // then a big-assed-number (number of remaining bytes in chunk) followed by 0x22
-  // -then-
-  // (a) possibly a big-assed-number (2nd-number-of-remaining-bytes-in-chunk) followed by 0x12 (or 1a?), the property+value-size,
-  //   the property and values, repeated until the 2nd-number-of-remaining-bytes-in-chunk is consumed, then a 72-byte token-like-thing
-  //   starting with 0x28
-  //
-  // -or-
-  //
-  // (b) possibly a big-assed-number (2nd-number-of-remaining-bytes-in-chunk) which is actually the the property+value-size, then the
-  //   property and values.
-  //
-  // a simple text property has a one-byte property type of '0x12', so beware of a data chunk of case (b) that begins with a simple text
-  // property like model-type.  E.g., 0xc0, 0x12, 0x50, 0x22, 0x05, 0x12, 0x03, 0x69, 0x36, 0x28, ..., 0xc0.  I've not seen that happen yet.
-
-  // case (a) i6 example:
-  //  0xc0, 0x12, 0x75, 0x22, 0x2b, 0x12, 0x03, 0xb8, 0x09, 0x01, 0x12, ..., 0x28, ..., 0xc0
-  // case (b) i6 examples:
-  //  0xc0, 0x12, 0x50, 0x22, 0x06, 0x1a, 0x04, 0x08, 0x03, 0x20, 0x10, 0x28, ..., 0xc0
-  //  0xc0, 0x12, 0x7b, 0x22, 0x31, 0x1a, 0x2f, ..., 0x28, ..., 0xc0
-  //  0xc0, 0x12, 0x4f, 0x22, 0x05, 0x12, 0x03, 0xda, 0x0a, 0x00, 0x28, ..., 0xc0
-
-  // case (c) when there's a schedule
-
-  // how to determine if it's case (a) or (b)?
-  // getting to the 0x22 is straightforward.
-  // if case (b) should satisify some assumptions:
-  //   1) the value after 0x22 is a one-byte big-assed-number because we ASS-U-ME no property/value message is larger that 255 bytes.  thus
-  //      post 0x22 data length < 255.
-  //   2) the value after the one-byte big-assed-number is not 0x12 or 0x1a (start of property/value message) [see note above about
-  //      simple text]
-  //   3) the value after the 0x22 is the size of the single property/value message in the data chunk.
-  //   4) that size plus remainingChunkSize + 1 (terminating 0xc0) == data.length
-
-  if (data[0] !== 0xc0) {
-    hbLog.warn(pA.Name + ' - expected start of message chunk (0x0c), got: ' + hexFormat(data[0]));
-    debugLog(pA, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
-    return [];
-  }
-  data = data.subarray(1); // remove 0xc0
-
-  if (data[0] !== 0x12) {
-    hbLog.warn(pA.Name + ' - expected start of message header (0x12 or 0x1a), got: ' + hexFormat(data[0]));
-    debugLog(pA, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
-    return [];
-  }
-  data = data.subarray(1); // remove 0x12
-
-  // accumulate remaining size (bigAssNumber)
-  let banArray:number[] = [];
-  do { // the Big Assed Number maybe be the same value as a "separator" byte (0x22), ergo do...while
-    banArray.push(data[0]);
-    data = data.subarray(1); // remove the byte we just consumed
-  }  while (data.length > 0 && data[0] !== 0x22);
-  const remainingChunkSize = bigAssNumber(Buffer.from(banArray));
-
-  if (data.length !== (remainingChunkSize + 1)) { // add in the 0xc0
-    hbLog.warn(pA.Name + ' - this is not the chunk size we\'re looking for: ' + remainingChunkSize + ', actual: ' + data.length);
-    debugLog(pA, 'network', 1, 'rawChunk: ' + hexFormat(rawChunk));
-    debugLog(pA, 'network', 1, 'data remaining: ' + hexFormat(data));
-    return [];
-  }
-  if (data.length === 0 || data[0] !== 0x22) {
-    hbLog.warn(pA.Name + ' - not good.  apparently we ran off the end of the data buffer');
-    debugLog(pA, 'network', 3, 'rawChunk: ' + hexFormat(rawChunk));
-    return [];
-  }
-  data = data.subarray(1); // remove the field separator (0x22)
-
-  // if it's the new (circa 4/4/2022) Haiku firmware then the mystery (token?) data at the end of the chunk isn't present
-
-  const tokenLength = pA.OldProtocolFlag ? 72 : 0;
-
-  let chunkSizeSansToken:number;
-  // let ignoredBytes = 0;
-
-  // data[0] is remaining chunk size
-  // data[1] is 0x12 or 0x1a
-  // data[2] is size of 1st (and only) property message
-  // ((data[0] - data[2]) === 2) // "=== 2" is starting byte (0x1a or 0x12) terminating byte (0xc0)
-  // (data.length == data[2] + tokenLength + 4) // +4: <chunkSizeSansToken byte> + 0x1a or ox12 + data[2] byte + 0xc0
-
-  if (data.length === (data[2] + tokenLength + 4))  { // this is the sole message in the chunk
-    const soleMessage = hexFormat(data.subarray(1, data[0]+1));
-    if (data[1] !== 0x1a) {
-      if (data[1] === 0x12) { // we're going to skip the sole message, therefore we're skipping the entire chunk
-        debugLogOnce(pA, 'redflags', 2, 'ignoring chunk with sole message: ' + soleMessage);
-        return [];
-      }
-      debugLog(pA, 'redflags', 1, 'sole message in a chunk is not 0x1a or 0x12, but rather: ' + hexFormat(data[1]));
-    } else { // it's a scheduling message
-      // ignore it.
-      debugLogOnce(pA, 'redflags', 2, 'ignoring chunk with sole  scheduling message: ' + soleMessage);
-      return [];
-    }
-
-    chunkSizeSansToken = data[0] + 2; // +1 for the 0x12 we're going to insert at the beginning, and 1 for the final 0xc0
-    // stuff a start byte (0x12) to make everything copacetic down the road
-    data = Buffer.concat([Buffer.from([0x12]), data]);
-  } else {
-    // accumulate remaining size (bigAssNumber)
-    banArray = [];
-    while (data.length > 0 && data[0] !== 0x12) {  // apparently 0x12 can not be part of this bigAssNumber?
-      banArray.push(data[0]);
-      data = data.subarray(1); // remove the byte we just consumed
-    }
-    chunkSizeSansToken = bigAssNumber(Buffer.from(banArray));
-  }
-
-  const assumedChunkSize = chunkSizeSansToken + tokenLength + 1; // the "+ 1" is for the terminating 0xc0
-
-  // this assertion about the remaining data length may be entirely unnecessary
-  if (data.length !== assumedChunkSize) {
-    if (data.length === (assumedChunkSize + 72)) {
-      debugLog(pA, 'redflags', 1, 'would be chunkSizeSansToken warning averted');
-      if (pA.OldProtocolFlag === undefined) {
-        debugLog(pA, 'redflags', 1, 'platformAccessory.OldProtocolFlag === undefined');
-      } else {
-        debugLog(pA, 'redflags', 1, 'OldProtocolFlag: ' + pA.OldProtocolFlag);
-      }
-    } else {
-      hbLog.warn(pA.Name + ' - chunkSizeSansToken: ' + assumedChunkSize + ', not what we expected with data length: '
-          + data.length);
-      debugLog(pA, 'redflags', 1, 'OldProtocolFlag: ' + pA.OldProtocolFlag);
-      debugLog(pA, 'redflags', 1, 'rawChunk: ' + hexFormat(rawChunk));
-
-      return [];
-    }
-  }
-
-  const processedMessageArray:string[][] = [];
-  /**
-  * pick out the property code and send it to the decode function to get the value from its
-  * coded field.  Then call the property's handler function to act on the message's contents (or not.)
-  */
-  while (data[0] !== 0xc0) {
-    if (data[0] === 0x28) { // 0x28 is the start of what looks like a token 72 bytes long followed by 0xc0 end of chunk.
-      if (data.length === 73) {
-        return processedMessageArray;
-      } else {
-        debugLog(pA, 'redflags', 3, 'surprise! token length was: ' + data.length);
-      }
-    }
-    if (data[0] !== 0x12) {
-      hbLog.warn(pA.Name + ' - expected 0x12, got: ', hexFormat(data.subarray(0, 1)));
-      debugLog(pA, 'redflags', 3, 'unexpected byte in chunk:  ' + hexFormat(data) + ' from: ' + hexFormat(rawChunk));
-      return processedMessageArray;
-    }
-    data = data.subarray(1);  // remove the 'start of header' (0x12) from the remaining data
-
-    len = data[0];
-    data = data.subarray(1);  // remove the 'length' byte from the remaining data
-
-    propertyFields = data.subarray(0, len); // this is the message - property code and value
-    data = data.subarray(len);  // remove the message from the remaining data
-
-    let hdrsize = 2; // most property headers are two bytes
-    if (pA.oneByteHeaders.includes(propertyFields[0])) {
-      hdrsize = 1;
-    }
-
-    const propertyCodeString = hexFormat(propertyFields.subarray(0, hdrsize));
-    const propertyValueField = propertyFields.subarray(hdrsize);
-
-    if (pA.propertiesTable[propertyCodeString] === undefined) {
-      hbLog.warn(pA.Name + ' - propertiesTable[' + propertyCodeString + '] === undefined');
-      continue;
-    }
-
-    const decodeValueFunction = pA.propertiesTable[propertyCodeString][DECODEVALUEFUNCTION];
-    if (decodeValueFunction === undefined) {
-      hbLog.warn(pA.Name + ' - No value decoding function for: ', propertyCodeString);
-    }
-
-    // the propertiesTable declaration for the decode value functions to have platform accessory and string arguments.
-    // we pass the arguments whether or not a given function requires them just in case we want to, for example, add a debugLog call
-    // in a given function.
-    const decodedValue = decodeValueFunction(propertyValueField, pA, 'noop');
-    if (decodedValue === undefined) {
-      hbLog.warn(pA.Name + ' - Could not decode value for: ', propertyCodeString);
-      continue;
-    }
-
-    // some unknown codes might be under surveillance - check if this is one of them?
-    codeWatch(propertyCodeString, decodedValue, propertyValueField, pA);
-
-    const propertyHandlerFunction = pA.propertiesTable[propertyCodeString][PROPERTYHANDLERFUNCTION];
-    if (propertyHandlerFunction === undefined) {
-      hbLog.warn(pA.Name + ' - undefined handler for:', propertyCodeString);
-      continue;
-    }
-
-    // propertyHandlerFunction(decodedValue, platformAccessory, propertyCodeString);
-    processedMessageArray.push([propertyCodeString, decodedValue]);
-  }
-  return processedMessageArray;
-}
-
-// Property Table
-function getPropertiesArray():typeof properties {
-  // some gymnastics here to get past lint
-  const properties: (((v: number | string, p: BigAssFans_i6PlatformAccessory, s: string) => void) |
-  ((b: Buffer|string, p: BigAssFans_i6PlatformAccessory) => string))[][] = [];
-  // many of the same codes occur in multiple chunks  (or in the same chunk?)
-  properties['0x0a'] =       [text3Value,     noopName];                //  name
-  properties['0x12'] =       [textValue,      getModel];                //  model
-  properties['0x1a'] =       [dataValue,      mysteryCode],             //  something to do with schedules
-  properties['0x18, 0xc0'] = [dataValue,      mysteryCode];             //  mystery
-  properties['0x22'] =       [textValue,      noopDateTime];            //  local datetime
-  properties['0x2a'] =       [textValue,      noopDateTime];            //  zulu datetime
-  properties['0x32'] =       [textValue,      noopDateTime];            //  mystery datetime
-  properties['0x3a'] =       [textValue,      firmwareVersion];         //  firmware version (sometimes zero-length?!)
-  properties['0x42'] =       [textValue,      noopMacAddress];          //  MAC address
-  properties['0x4a'] =       [textValue,      noopToken];               //  mystery - token
-  properties['0x52'] =       [textValue,      noopToken];               //  mystery - token
-  properties['0x5a'] =       [textValue,      noopWebSite];             //  website - api.bigassfans.com
-  properties['0x6a, 0x01'] = [intValue,       mysteryCode];             //  mystery
-  properties['0x70'] =       [intValue,       mysteryCode];             //  mystery
-  properties['0x78'] =       [intValue,       mysteryCode];             //  mystery
-  properties['0x80, 0x02'] = [intValue,       mysteryCode];             //  mystery
-  properties['0x80, 0x03'] = [weatherValue,   noopComfortIdealTemp];    //  comfort ideal temperature
-  properties['0x80, 0x04'] = [intValue,       mysteryCode];             //  mystery
-  properties['0x82, 0x01'] = [text4Value,     noopVersion];             //  mystery xware
-  properties['0x88, 0x02'] = [intValue,       mysteryCode];             //  mystery
-  properties['0x88, 0x03'] = [intValue,       mysteryCode];             //  mystery
-  properties['0x88, 0x04'] = [intValue,       ecoModeOnState];          //  eco mode (haiku)
-  properties['0x8a, 0x01'] = [dataValue,      capabilities];            //  mystery includes bulb present flag (haiku)
-  properties['0x90, 0x03'] = [intValue,       noop];                    //  comfort min speed
-  properties['0x90, 0x05'] = [intValue,       mysteryCode];             //  mystery (haiku)
-  properties['0x9a, 0x05'] = [dataValue,      mysteryCode];             //  mystery (haiku)
-  properties['0x98, 0x03'] = [intValue,       noop];                    //  comfort max speed
-  properties['0xa0, 0x03'] = [boolValue,      noop];                    //  fan auto -> motion -> motion sense switch
-  properties['0xa0, 0x04'] = [onOffAutoValue, lightOnState];            //  light on/off/auto
-  properties['0xa8, 0x03'] = [varIntValue,    noop];                    //  fan auto -> motion -> motion timeout (time)
-  properties['0xa8, 0x04'] = [intValue,       lightBrightness];         //  light brightness
-  properties['0xa8, 0x08'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xaa, 0x02'] = [textValue,      mysteryCode];             //  mystery (haiku)
-  properties['0xb0, 0x03'] = [boolValue,      noop];                    //  fan return to auto (return to auto switch)
-  properties['0xb0, 0x04'] = [intValue,       noop];                    //  brightness as level (0,1-16)
-  properties['0xb0, 0x05'] = [weatherValue,   currentTemperature];      //  temperature
-  properties['0xb0, 0x07'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xb0, 0x08'] = [boolValue,      noop];                    //  LED indicators
-  properties['0xb0, 0x09'] = [boolValue,      noop];                    //  prevent additional controls
-  properties['0xb8, 0x03'] = [varIntValue,    noop];                    //  fan return to auto (return after)
-  properties['0xb8, 0x04'] = [varIntValue,    lightColorTemperature];   //  color temperature
-  properties['0xb8, 0x05'] = [weatherValue,   currentRelativeHumidity]; //  humidity
-  properties['0xb8, 0x08'] = [boolValue,      noop];                    //  fan beep
-  properties['0xb8, 0x09'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xc0, 0x01'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xc0, 0x04'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xc0, 0x08'] = [intValue,       mysteryCode];             //  mystery [legacy remote enable - haiku only]?
-  properties['0xc2, 0x03'] = [textValue,      mysteryCode];             //  mystery
-  properties['0xc2, 0x07'] = [textValue,      noop];                    //  IP address
-  properties['0xc2, 0x09'] = [dataValue,      mysteryCode];             //  mystery MAC address with or w/o firmware versions (text6/text7)
-  properties['0xc8, 0x01'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xc8, 0x03'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xc8, 0x04'] = [varIntValue,    noop];                    //  light auto motion timeout (time)
-  properties['0xc8, 0x05'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xc8, 0x07'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xc8, 0x08'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xc8, 0x09'] = [intValue,       mysteryCode];             //  mystery (haiku)
-  properties['0xd0, 0x01'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xd0, 0x03'] = [boolValue,      whooshOnState];           //  whoosh
-  properties['0xd0, 0x04'] = [boolValue,      noop];                    //  light return to auto (return to auto switch)
-  properties['0xd0, 0x08'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xd8, 0x01'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xd8, 0x02'] = [onOffAutoValue, fanOnState];              //  fan on/off/auto
-  properties['0xd8, 0x04'] = [varIntValue,    noop];                    //  light return to auto (return after)
-  properties['0xda, 0x03'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xda, 0x0a'] = [intValue,       mysteryCode];             //  something to do with a "group" including group name
-  properties['0xdb, 0xdc'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xe0, 0x01'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xe0, 0x02'] = [boolValue,      fanRotationDirection];    //  rotation direction
-  properties['0xe0, 0x03'] = [boolValue,      noop];                    //  comfort heat assist
-  properties['0xe0, 0x08'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xe0, 0x0a'] = [intValue,       mysteryCode];             //  mystery (haiku)
-  properties['0xe2, 0x04'] = [textValue,      mysteryCode];             //  mystery
-  properties['0xe2, 0x07'] = [text2Value,     noop];                    //  SSID
-  properties['0xe2, 0x09'] = [dataValue,      mysteryCode];             //  mystery (haiku)
-  properties['0xe8, 0x01'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xe8, 0x02'] = [intValue,       noop];                    //  fan speed as %
-  properties['0xe8, 0x03'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xe8, 0x04'] = [boolValue,      dimToWarmOnState];        //  light dim to warm
-  properties['0xe8, 0x0a'] = [dataValue,      mysteryCode];             //  mystery (haiku)
-  properties['0xf0, 0x01'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xf0, 0x02'] = [intValue,       fanRotationSpeed];        //  fan rotation speed
-  properties['0xf0, 0x03'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xf0, 0x04'] = [varIntValue,    noop];                    //  warmest color temperature
-  properties['0xf0, 0x0a'] = [dataValue,      mysteryCode];             //  mystery (haiku)
-  properties['0xf8, 0x01'] = [intValue,       mysteryCode];             //  mystery
-  properties['0xf8, 0x02'] = [boolValue,      noop];                    //  fan auto comfort
-  properties['0xf8, 0x03'] = [intValue,       noop];                    //  revolutions per minute
-  properties['0xf8, 0x04'] = [varIntValue,    noop];                    //  coolest color temperature
-  properties['0xf8, 0x0a'] = [intValue,       mysteryCode];             //  mystery (haiku)
-
-  /*
-  // the following props in sean9keenan's 'homebridge-bigAssFans createGetField are not listed above - might be in the mystery category
-  // LIGHT;LEVEL;MIN
-  // LIGHT;LEVEL;MAX
-  // DEVICE;LIGHT;PRESENT
-  // SNSROCC;STATUS;OCCUPIED|UNOCCUPIED
-  // SNSROCC;TIMEOUT;MIN
-  // SNSROCC;TIMEOUT;MAX
-  // SMARTMODE;ACTUAL;OFF|COOLING|HEATING
-  // SMARTMODE;STATE;LEARN;COOLING;HEATING;FOLLOWSTAT
-  // LEARN;STATE;LEARN|OFF
-  // LEARN;MINSPEED
-  // LEARN;MAXSPEED
-  // LEARN;ZEROTEMP
-  // SLEEP;STATE;ON|OFF
-  // SMARTSLEEP;MINSPEED
-  // SMARTSLEEP;MAXSPEED
-  // WINTERMODE;STATE;ON|OFF
-  // WINTERMODE;HEIGHT
-  // NW;TOKEN
-  // NW;DHCP;ON|OFF
-  // FW;FW00003
-  // NW;AP;ON|OFF
-  */
-  return properties;
-}
-
 /**
 * property handler functions
 */
 
-function capabilities(value: string, pA:BigAssFans_i6PlatformAccessory) {
-  // it's a stretch to think I can parse this, so we'll just brute force it.  I've only seen this '0x8a, 0x01' property sequence on Haikus.
-
-  // wojo fan with light
-  // 0x12, 0x11, 0x8a, 0x01, 0x0e, 0x08, 0x01, 0x18, 0x01, 0x20, 0x01, 0x38, 0x01, 0x48, 0x01, 0x50, 0x01, 0x70, 0x01
-  // wojo fan without light
-  // 0x12, 0x0f, 0x8a, 0x01, 0x0c, 0x08, 0x01, 0x18, 0x01, 0x38, 0x01, 0x48, 0x01, 0x50, 0x01, 0x70, 0x01
-  // Klidec
-  // 0x12, 0x11, 0x8a, 0x01, 0x0e, 0x08, 0x01, 0x18, 0x01, 0x20, 0x01, 0x38, 0x01, 0x48, 0x01, 0x50, 0x01, 0x70, 0x01,
-
-  if (value.indexOf('0x20, 0x01') === -1) {
+function bulbPresent(value: boolean, pA:BigAssFans_i6PlatformAccessory) {
+  if (value) {
+    infoLogOnce(pA, 'light detected');
+  } else {
     infoLogOnce(pA, 'no light detected');
     const service = pA.accessory.getService(pA.platform.Service.Lightbulb);
     if (service) {
       pA.accessory.removeService(service);
     }
-  } else {
-    infoLogOnce(pA, 'light detected');
   }
 }
 
-function getModel(value: string, pA:BigAssFans_i6PlatformAccessory) {
-
+function productType(value: string, pA:BigAssFans_i6PlatformAccessory) {
   const regex = /[ -~]/g;  // count the printable characters
   const found = value.match(regex);
   if (found === null || (found.length !== value.length)) {
@@ -1074,11 +734,11 @@ function getModel(value: string, pA:BigAssFans_i6PlatformAccessory) {
     pA.modelUnknown = false;
 
     if (pA.accessory.context.device.devModelOverride) {
-      debugLog(pA, 'progress', 0, 'overriding model "' + value + '" with "' + pA.accessory.context.device.devModelOverride + '"');
+      debugLog(pA, 'progress', 0, 'overriding product type "' + value + '" with "' + pA.accessory.context.device.devModelOverride + '"');
       value = pA.accessory.context.device.devModelOverride;
     }
     pA.Model = value;
-    debugLog(pA, 'progress', 0, 'model: ' + pA.Model + ' (' + hexFormat(Buffer.from(value, 'utf8')) + ')');
+    debugLog(pA, 'progress', 0, 'product type: ' + pA.Model + ' (' + hexFormat(Buffer.from(value, 'utf8')) + ')');
 
     pA.accessory.getService(pA.platform.Service.AccessoryInformation)!
       .setCharacteristic(pA.platform.Characteristic.Model, pA.Model);
@@ -1087,7 +747,7 @@ function getModel(value: string, pA:BigAssFans_i6PlatformAccessory) {
       // this.lightBulbService.getCharacteristic(this.platform.Characteristic.ColorTemperature)
       //   .removeAllListeners('set')
       //   .removeAllListeners('get');
-      debugLog(pA, 'newcode', 1, 'no ColorTemperature Characteristic for model "' + pA.Model + '"');
+      debugLog(pA, 'newcode', 1, 'no ColorTemperature Characteristic for product type "' + pA.Model + '"');
       pA.lightBulbService.removeCharacteristic(pA.lightBulbService.getCharacteristic(pA.platform.Characteristic.ColorTemperature));
     }
 
@@ -1095,7 +755,7 @@ function getModel(value: string, pA:BigAssFans_i6PlatformAccessory) {
       const service = pA.accessory.getService(pA.platform.Service.HumiditySensor);
       if (service) {
         pA.accessory.removeService(service);
-        debugLog(pA, 'newcode', 1, 'no HumiditySensor service for model "' + pA.Model + '"');
+        debugLog(pA, 'newcode', 1, 'no HumiditySensor service for product type "' + pA.Model + '"');
       }
     }
 
@@ -1103,7 +763,7 @@ function getModel(value: string, pA:BigAssFans_i6PlatformAccessory) {
       const service = pA.accessory.getService(pA.platform.Service.TemperatureSensor);
       if (service) {
         pA.accessory.removeService(service);
-        debugLog(pA, 'newcode', 1, 'no TemperatureSensor service for model "' + pA.Model + '"');
+        debugLog(pA, 'newcode', 1, 'no TemperatureSensor service for product type "' + pA.Model + '"');
       } else {
         debugLog(pA, 'newcode', 1, 'service: ' + service);
       }
@@ -1126,50 +786,22 @@ function firmwareVersion(value: string, pA: BigAssFans_i6PlatformAccessory) {
   }
 }
 
-function noopDateTime(value: string, pA:BigAssFans_i6PlatformAccessory) {
-  debugLog(pA, 'noopcodes', 3, 'datetime: ' + value);
-}
-
-function noopVersion(value: string, pA:BigAssFans_i6PlatformAccessory) {
-  debugLog(pA, 'noopcodes', 2, 'version: ' + value);
-}
-
-function noopName(value: string, pA:BigAssFans_i6PlatformAccessory) {
-  debugLog(pA, 'noopcodes', 3, 'name: ' + value);
-}
-
-function noopMacAddress(value: string, pA:BigAssFans_i6PlatformAccessory) {
-  debugLog(pA, 'noopcodes', 3, 'MAC address: ' + value);
-}
-
-function noopWebSite(value: string, pA:BigAssFans_i6PlatformAccessory) {
-  debugLog(pA, 'noopcodes', 3, 'web site: ' + value);
-}
-
-function noopComfortIdealTemp(value: string, pA:BigAssFans_i6PlatformAccessory) {
-  debugLog(pA, 'noopcodes', 3, 'comfort ideal temperature: ' + value);
-}
-
-function noopToken(value: string, pA:BigAssFans_i6PlatformAccessory) {
-  debugLog(pA, 'noopcodes', 3, 'token: ' + value);
-}
-
-function lightColorTemperature(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
+function lightColorTemperature(value: number, pA:BigAssFans_i6PlatformAccessory) {
   if (!pA.accessory.getService(pA.platform.Service.Lightbulb)) {
     debugLog(pA, 'newcode', 1, 'no lightBulbService');
     return;
   }
   if (pA.Model !== MODEL_HAIKU_HI && pA.Model !== MODEL_HAIKU_L) {
+    pA.lightStates.ColorTemperature = value;
     const mireds = Math.round(1000000 / pA.lightStates.ColorTemperature);
-    pA.lightStates.ColorTemperature = Number(value);
-    debugLog(pA, 'characteristics', 3, 'update ColorTemperature: ' + mireds);
+    debugLog(pA, ['light', 'characteristics'], [1, 3], 'update ColorTemperature: ' + mireds + ' (' + pA.lightStates.ColorTemperature + ')');
     pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.ColorTemperature, mireds);
   } else {
     // debugLog(pA, 'newcode', 1, 'ColorTemperature: ignored');
   }
 }
 
-function lightBrightness(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
+function lightBrightness(value: number, pA:BigAssFans_i6PlatformAccessory) {
   if (value !== 0) {
     pA.lightStates.homeShieldUp = false;
     pA.lightStates.Brightness = (value as number);
@@ -1240,7 +872,7 @@ function lightOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
   // pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
 }
 
-function fanOnState(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
+function fanOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
   if (pA.showFanAutoSwitch) {
     pA.fanAutoSwitchOn = (value === 2) ? true: false;
     debugLog(pA, 'characteristics', 3, 'update fan auto: ' + pA.fanAutoSwitchOn);
@@ -1255,7 +887,7 @@ function fanOnState(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
   }
 }
 
-function fanRotationDirection(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
+function fanRotationDirection(value: number, pA:BigAssFans_i6PlatformAccessory) {
   //  fan reports if 'reverse rotation' is on or off, homebridge wants rotation direction
   //  reverse switch off (0) == rotation direction counterclockwise (1)
   const rotationDirection = value === 0 ? 1 : 0;
@@ -1264,7 +896,7 @@ function fanRotationDirection(value: number|string, pA:BigAssFans_i6PlatformAcce
   pA.fanService.updateCharacteristic(pA.platform.Characteristic.RotationDirection, pA.fanStates.RotationDirection);
 }
 
-function fanRotationSpeed(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
+function fanRotationSpeed(value: number, pA:BigAssFans_i6PlatformAccessory) {
   if (value !== 0) { // don't tell homebridge speed is zero, it only confuses it.  It'll find out it's off in due course.
     pA.fanStates.homeShieldUp = false;
     pA.fanStates.RotationSpeed = (value as number);
@@ -1288,7 +920,7 @@ function fanRotationSpeed(value: number|string, pA:BigAssFans_i6PlatformAccessor
   }
 }
 
-function currentTemperature(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
+function currentTemperature(value: number, pA:BigAssFans_i6PlatformAccessory) {
   if (pA.accessory.getService(pA.platform.Service.TemperatureSensor) === undefined) {
     return;
   }
@@ -1312,7 +944,7 @@ function currentTemperature(value: number|string, pA:BigAssFans_i6PlatformAccess
   pA.temperatureSensorService.updateCharacteristic(pA.platform.Characteristic.CurrentTemperature, pA.CurrentTemperature);
 }
 
-function currentRelativeHumidity(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
+function currentRelativeHumidity(value: number, pA:BigAssFans_i6PlatformAccessory) {
   debugLog(pA, 'humidity', 2, pA.Name + ' - CurrentRelativeHumidity:' + value);
 
   if (value < 0 || value > 100) {
@@ -1332,7 +964,7 @@ function currentRelativeHumidity(value: number|string, pA:BigAssFans_i6PlatformA
   pA.humiditySensorService.updateCharacteristic(pA.platform.Characteristic.CurrentRelativeHumidity, pA.CurrentRelativeHumidity);
 }
 
-function whooshOnState(value: number|string, pA:BigAssFans_i6PlatformAccessory) {
+function whooshOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
   if (pA.showWhooshSwitch) {
     const onValue = (value === 0 ? false : true);
     pA.whooshSwitchOn = onValue;
@@ -1359,11 +991,8 @@ function ecoModeOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
   }
 }
 
-function noop() {
-  // this body intentionally left blank
-}
-
 // keeping track to gather clues in unending effort to ID unknown codes
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function mysteryCode(value: string, pA:BigAssFans_i6PlatformAccessory, code: string) {
   const v = value;
   const p = pA.mysteryProperties[code];
@@ -1379,117 +1008,8 @@ function mysteryCode(value: string, pA:BigAssFans_i6PlatformAccessory, code: str
   }
 }
 
-/**
-* value decoding functions
-*/
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function testValue(bytes:Buffer): number|string {
-  hbLog.debug('some fan' + ' - testValue(' + hexFormat(bytes) + ')');
-  return('test');
-}
-
-function onOffAutoValue(bytes:Buffer): number|string|undefined {
-  switch (bytes[0]) {
-    case 0x00: // thing is off, auto is off
-    case 0x01: // thing is on, may or may not be due to auto being on
-    case 0x02: // auto is on fan may or may not be spinning
-      return (bytes[0]);
-    default:
-      hbLog.warn('some fan' + ' - unknown value for \'on|off|auto\': ', hexFormat(bytes));
-      return undefined;
-  }
-}
-
-function boolValue(bytes:Buffer): number|string|undefined {
-  switch (bytes[0]) {
-    case 0x00:
-    case 0x01:
-      return(bytes[0]);
-    default:
-      hbLog.warn('some fan' + ' - unknown value for "on|off" or "direction": ' + hexFormat(bytes));
-      return undefined;
-  }
-}
-
-function intValue(bytes:Buffer): number|string {
-  return(bytes.readUInt8());
-}
-
-function varIntValue(bytes:Buffer): number|string {
-  return(bigAssNumber(bytes));
-}
-
-function textValue(bytes:Buffer): number|string {
-  // <strlen> [<char>, ...]
-  return(bytes.subarray(1).toString());
-}
-
-function text2Value(bytes:Buffer): number|string {
-  return(bytes.subarray(3).toString());
-}
-
-function text3Value(bytes:Buffer): number|string {
-  return(bytes.toString()); // i.e. subarray.toString();
-}
-
-function text4Value(bytes:Buffer): string {
-  // value = 10 08 02 12 05 31 2e 37 2e 31 1a 05 31 2e 35 2e 30
-  //                         1  .  7  .  1        1  .  5  .  1
-  // 0x10 - length of total text components
-  // 0x08 - ?
-  // 0x02 - two components
-  // 0x12 - start of components
-  // 0x05 - 5 bytes for 1st component <31 2e 37 2e 31>
-  // 0x1a - separator
-  // 0x05 - 5 bytes for 2nd component <31 2e 35 2e 30>
-  return(bytes.subarray(5, 10).toString() + ' ' + bytes.subarray(12).toString());
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function text5Value(bytes:Buffer): number|string {
-  // value = 0e 12 05 31 2e 37 2e 31 1a 05 31 2e 37 2e 30
-  // 0x0e - length of total text components
-  // 0x12 - start
-  // 0x05 - 5 bytes for 1st component <31 2e 37 2e 31>
-  // 0x1a - separator
-  // 0x05 - 5 bytes for 2nd component <31 2e 37 2e 30
-  return(bytes.subarray(3, 8).toString() + ' ' + bytes.subarray(10).toString());
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function text6Value(bytes:Buffer): number|string {
-  // value = 21 12 05 31 2e 37 2e 31 1a 05 31 2e 35 2e 30 22 11 39 42 3a 46 30 3a 36 41 3a 33 37 3a 38 44 3a 44 44
-  // value = 13,22,11,39,42,3a,46,30,3a,36,41,3a,33,37,3a,38,44,3a,44,44,
-  // 0x21 - length of total text components
-  // 0x12 - start
-  // 0x05 - 5 bytes for 1st component <31 2e 37 2e 31>
-  // 0x1a - separator
-  // 0x05 - 5 bytes for next component <31 2e 35 2e 30>
-  // 0x22 - ?
-  // 0x11 - 17 bytes for next component
-  return(bytes.subarray(3, 8).toString() + ' ' + bytes.subarray(12, 15).toString() + ' ' + bytes.subarray(17).toString());
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function text7Value(bytes:Buffer): number|string {
-  // value = 13,22,11,39,42,3a,46,30,3a,36,41,3a,33,37,3a,38,44,3a,44,44,
-  // 0x13 - length
-  // 0x22 - ?
-  // 0x11 - -length
-  // 9B:F0:6A:37:8D:DD
-  return(bytes.subarray(3, 8).toString() + ' ' + bytes.subarray(12, 15).toString() + ' ' + bytes.subarray(17).toString());
-}
-
-function weatherValue(bytes:Buffer): number|string {
-  return(bigAssNumber(bytes) / 100);
-}
-
-function dataValue(bytes:Buffer): string {
-  return(hexFormat(bytes));
-}
-
 // a little hack for codes under investigation
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function codeWatch(s: string, v: string|number|Buffer, m: Buffer, pA:BigAssFans_i6PlatformAccessory) {
   if (s === '0xe8, 0x01') {
     debugLog(pA, 'cluing', 5, 'code watch - s: ' + s + ', m: ' + hexFormat(m));
@@ -1510,78 +1030,51 @@ const START_STUFF = 0xDC;
 // 0xdb, 0xdc -> 0xc0
 // 0xdb, 0xdd -> 0xdb
 
-function unstuff(data:typeof Buffer, pA:BigAssFans_i6PlatformAccessory):typeof Buffer {
+function unstuff(data: Buffer): Buffer {
   const unstuffedData: number[] = [];
-  if (data[0] !== START) {
-    debugLog(pA, 'network', 1, 'data doesn\'t begin with START byte - all bets are off');
-  } else {
-    let dataIndex = 0;
-    let unstuffedDataIndex = 0;
-    unstuffedData[unstuffedDataIndex++] = data[dataIndex++];
-    while (dataIndex < (data.length - 1)) {
-      if (data[dataIndex] === ESC && data[dataIndex+1] === START_STUFF) {
-        unstuffedData[unstuffedDataIndex++] = 0xc0;
-        dataIndex += 2; // skip over the ESC and the START_STUFF
-      } else if (data[dataIndex] === ESC && data[dataIndex+1] === ESC_STUFF) {
-        unstuffedData[unstuffedDataIndex++] = 0xDB;
-        dataIndex += 2; // skip over the ESC and the ESC_STUFF
-      } else {
-        unstuffedData[unstuffedDataIndex++] = data[dataIndex++];
-      }
+  let dataIndex = 0;
+  let unstuffedDataIndex = 0;
+  while (dataIndex < data.length) {
+    if (data[dataIndex] === ESC && data[dataIndex+1] === START_STUFF) {
+      unstuffedData[unstuffedDataIndex++] = START;
+      dataIndex += 2; // skip over the ESC and the START_STUFF
+    } else if (data[dataIndex] === ESC && data[dataIndex+1] === ESC_STUFF) {
+      unstuffedData[unstuffedDataIndex++] = ESC;
+      dataIndex += 2; // skip over the ESC and the ESC_STUFF
+    } else {
+      unstuffedData[unstuffedDataIndex++] = data[dataIndex++];
     }
-    unstuffedData[unstuffedDataIndex] = data[dataIndex];  // better be c0! should check it?
   }
   return Buffer.from(unstuffedData);
 }
 
-function bigAssNumber(value: typeof Buffer) {
-  let n = value[0];
-  for (let i = 1; i < value.length; i++) {
-    n += (value[i] - 1) * 128**i;
-  }
-  return n;
-}
-
-function stuffed(n: number) {
-  const result = makeBigAssNumberValues(n);
-  if (typeof(result) === 'number') {
-    return [ result ];
-  } else {
-    const stuffedResult:number[] = [];
-    let stuffedResultIndex = 0;
-    if (result.length > 1) {
-      for (let i = 0; i < result.length; i++) {
-        if (result[i] === '0xc0') {
-          stuffedResult[stuffedResultIndex++] = ESC;
-          stuffedResult[stuffedResultIndex++] = START_STUFF;
-        } else if (result[i] === '0xDB') {
-          stuffedResult[stuffedResultIndex++] = ESC;
-          stuffedResult[stuffedResultIndex++] = ESC_STUFF;
-        } else {
-          stuffedResult[stuffedResultIndex++] = result[i];
-        }
-      }
-    }
-    return stuffedResult;
-  }
-}
-
-function makeBigAssNumberValues(n: number) {
-  const a = [0];  // intialize it, then empty it to keep typescript from complaining about assigning to type never.
-  a.pop();
-  if (n > 255) {
-    const b = Math.trunc(n/128);
-    if (b > 255) {
-      a.push(n % 256);
-      return a.concat(makeBigAssNumberValues(b));
+function stuff(inArray: number[]) : number[] {
+  const outArray:number[] = [];
+  let outIndex = 0;
+  for (let i = 0; i < inArray.length; i++) {
+    if (inArray[i] === START) {
+      outArray[outIndex++] = ESC;
+      outArray[outIndex++] = START_STUFF;
+    } else if (inArray[i] === ESC) {
+      outArray[outIndex++] = ESC;
+      outArray[outIndex++] = ESC_STUFF;
     } else {
-      a.push(makeBigAssNumberValues(n - (b - 1) * 128));
-      return a.concat(b);
+      outArray[outIndex++] = inArray[i];
     }
-  } else {
-    a.push(n);
-    return a[0];
   }
+  return outArray;
+}
+
+// https://github.com/sorribas/varint.c
+function varint_encode(n: number) : number[] {
+  const a : number[] = [];
+
+  while (n & ~0x7F) {
+    a.push(n & 0xFF) | 0x80;
+    n = n >> 7;
+  }
+  a.push(n);
+  return a;
 }
 
 function hexFormat(arg) {
@@ -1651,4 +1144,443 @@ function clientWrite(client, b, pA:BigAssFans_i6PlatformAccessory) {
     // hbLog.warn('clientWrite(' + client + ', ' + b.toString('hex') + ') failed');
     hbLog.warn(pA.Name + ' - clientWrite(..., ' + b.toString('hex') + ') failed');
   }
+}
+
+function getVarint2(b: Buffer): [Buffer, number] {
+  let r = 0;
+  const a: number[] = [];
+
+  for (let index = 0; index < b.length; index++) {
+    if (b[index] & 0x80) {
+      a.push(b[index] & 0x7f);
+    } else {
+      a.push(b[index] & 0x7f);
+      break;
+    }
+  }
+
+  for (let index = a.length - 1; index >= 0; index--) {
+    r = (r << 7) | a[index];
+  }
+
+  return [b.subarray(a.length), r];
+}
+
+function getProtoElements2(b: Buffer): [Buffer, number, number] {
+  // key is a varint
+  let key = 0;
+  const a: number[] = [];
+
+  for (let index = 0; index < b.length; index++) {
+    if (b[index] & 0x80) {
+      a.push(b[index] & 0x7f);
+    } else {
+      a.push(b[index] & 0x7f);
+      break;
+    }
+  }
+
+  for (let index = a.length - 1; index >= 0; index--) {
+    key = (key << 7) | a[index];
+  }
+
+  return [b.subarray(a.length), key & 0x07,  key >>> 3];
+}
+
+function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
+
+  let type: number;
+  let field: number;
+  let length: number;
+  let s:string, v: number;
+
+  [b, type, field] = getProtoElements2(b);
+  if (field === 2) { // top level
+    [b, length] = getVarint2(b);
+
+    [b, type, field] = getProtoElements2(b);
+
+    while (b.length > 0) {
+      if (field === 4) {  // level 2
+        [b, length] = getVarint2(b);
+
+        const remainingLength = (b.length) - length;
+        while (b.length > remainingLength) {
+          [b, type, field] = getProtoElements2(b);
+          if (field === 2) {
+            [b, length] = getVarint2(b);
+            [b, type, field] = getProtoElements2(b);
+            switch (field) {
+              case 2: // product type
+                [b, s] = getString(b);
+                productType(s, pA);
+                break;
+              case 7: // firmware version (sometimes zero-length?!)
+                [b, s] = getString(b);
+                firmwareVersion(s, pA);
+                break;
+              case 43:  // fan on/off/auto
+                [b, v] = getValue(b);
+                fanOnState(v, pA);
+                break;
+              case 44:  //  rotation direction
+                [b, v] = getValue(b);
+                fanRotationDirection(v, pA);
+                break;
+              case 46:  // fan rotation speed
+                [b, v] = getValue(b);
+                fanRotationSpeed(v, pA);
+                break;
+              case 58:  // whoosh
+                [b, v] = getValue(b);
+                whooshOnState(v, pA);
+                break;
+              case 65:  // eco mode (haiku)
+                [b, v] = getValue(b);
+                ecoModeOnState(v, pA);
+                break;
+              case 68:  // light on/off/auto
+                [b, v] = getValue(b);
+                lightOnState(v, pA);
+                break;
+              case 69:  // light brightness
+                [b, v] = getValue(b);
+                lightBrightness(v, pA);
+                break;
+              case 71:  // color temperature
+                [b, v] = getValue(b);
+                lightColorTemperature(v, pA);
+                break;
+              case 77:  // light dim to warm
+                [b, v] = getValue(b);
+                dimToWarmOnState(v, pA);
+                break;
+              case 86:  // temperature
+                [b, v] = getValue(b);
+                currentTemperature(v / 100, pA);
+                break;
+              case 87:  // humidity
+                [b, v] = getValue(b);
+                currentRelativeHumidity(v / 100, pA);
+                break;
+
+              // ignore strings
+              case 1: // name
+              case 4: // local datetime
+              case 5: // zulu datetime
+              case 8: // MAC address
+              case 11:  // website - api.bigassfans.com
+              case 120: // IP address
+                [b, s] = getString(b);  // ignore
+                break;
+
+              // ignore numbers
+              case 45:  // fan speed as %
+              case 47:  // fan auto comfort
+              case 48:  // comfort ideal temperature
+              case 50:  // comfort min speed
+              case 51:  // comfort max speed
+              case 52:  // fan auto -> motion -> motion sense switch
+              case 53:  // fan auto -> motion -> motion timeout (time)
+              case 54:  // fan return to auto (return to auto switch)
+              case 55:  // fan return to auto (return after)
+              case 60:  // comfort heat assist
+              case 63:  // revolutions per minute
+              case 70:  // brightness as level (0,1-16)
+              case 73:  // light auto motion timeout (time)
+              case 74:  // light return to auto (return to auto switch)
+              case 75:  // light return to auto (return after
+              case 78:  // warmest color temperature
+              case 79:  // coolest color temperature
+              case 134: // LED indicators
+              case 135: // fan beep
+              case 136: // mystery [legacy remote enable - haiku only]?
+              case 150: // prevent additional controls
+                [b, v] = getValue(b); // ignore
+                break;
+
+              // mystery strings
+              case 6:
+              case 9:
+              case 10:
+              case 13:
+              case 37:
+              case 56:
+              case 59:
+              case 76:
+              case 83:
+              case 156:
+                [b, s] = getString(b);
+                debugLog(pA, 'cluing', 6, 'field ' + field + ', mystery string: ' + s);
+                break;
+
+              // mystery numbers
+              case 3:
+              case 14:
+              case 15:
+              case 24:
+              case 25:
+              case 26:
+              case 27:
+              case 28:
+              case 29:
+              case 30:
+              case 31:
+              case 32:
+              case 33:
+              case 49:
+              case 57:
+              case 61:
+              case 62:
+              case 64:
+              case 72:
+              case 82:
+              case 89:
+              case 118:
+              case 121:
+              case 133:
+              case 137:
+              case 138:
+              case 140:
+              case 151:
+              case 153:
+              case 172:
+              case 173:
+              case 174:
+              case 175:
+                [b, v] = getValue(b);
+                debugLog(pA, 'cluing', 6, 'field ' + field + ', mystery number: ' + v);
+                break;
+
+              case 124: { // WiFi messages
+                [b, length] = getVarint2(b);
+                const remainingLength = (b.length) - length;
+                while (b.length > remainingLength) {
+                  [b, type, field] = getProtoElements2(b);
+                  switch (field) {
+                    case 1: // SSID
+                      [b, s] = getString(b); // ignore
+                      break;
+
+                    default:
+                      debugLog(pA, 'cluing', 1, 'fell into default, WiFi messages field: "' + field + '"');
+                      b = b.subarray(b.length - remainingLength);
+                      break;
+                  }
+                }
+                break;
+              }
+
+              case 16:
+              case 152: {
+                [b, length] = getVarint2(b);
+                const remainingLength = (b.length) - length;
+                while (b.length > remainingLength) {
+                  [b, type, field] = getProtoElements2(b);
+                  switch (field) {
+                    case 1:
+                      [b, v] = getValue(b); // ignore
+                      break;
+                    case 2:
+                    case 3:
+                    case 4:
+                      [b, s] = getString(b); // ignore
+                      break;
+
+                    default:
+                      debugLog(pA, 'cluing', 1, 'fell into default, field 152 message with subfield: "' + field + '"');
+                      b = b.subarray(b.length - remainingLength);
+                      break;
+                  }
+                }
+                break;
+              }
+
+              case 17: { // capabilities (include light pressence)
+                let hasBulb = true;
+                [b, length] = getVarint2(b);
+                const remainingLength = (b.length) - length;
+                while (b.length > remainingLength) {
+                  [b, type, field] = getProtoElements2(b);
+                  switch (field) {
+                    case 1:
+                    case 3:
+                    case 7:
+                    case 9:
+                    case 10:
+                    case 14:
+                      [b, v] = getValue(b);  // ignore
+                      break;
+                    case 4:
+                      [b, v] = getValue(b);  // bulb not equipped
+                      if (v === 1) {
+                        hasBulb = false;
+                      } else {
+                        debugLog(pA, 'redflags', 1, 'unexpected bulb pressence value: ' + v);
+                      }
+                      break;
+
+                    default:
+                      debugLog(pA, 'cluing', 1, 'fell into default, field 171 message with subfield: "' + field + '"');
+                      b = b.subarray(b.length - remainingLength);
+                      break;
+                  }
+                  bulbPresent(hasBulb, pA);
+                }
+                break;
+              }
+
+
+              case 171: { // something to do with a "group" including group name
+                [b, length] = getVarint2(b);
+                const remainingLength = (b.length) - length;
+                while (b.length > remainingLength) {
+                  [b, type, field] = getProtoElements2(b);
+                  switch (field) {
+                    case 2:
+                      [b, s] = getString(b);  // ignore
+                      break;
+                    case 3:
+                      [b, s] = getString(b);  // ignore
+                      break;
+
+                    default:
+                      debugLog(pA, 'cluing', 1, 'fell into default, field 171 message with subfield: "' + field + '"');
+                      b = b.subarray(b.length - remainingLength);
+                      break;
+                  }
+                }
+                break;
+              }
+
+              default:
+                debugLog(pA, 'cluing', 1, 'fell into default, field: "' + field + '"');
+                b = doUnknownField(b, type, pA);
+                break;
+            }
+          } else if (field === 3) {  // schedule
+            [b, length] = getVarint2(b);
+            const residualLength = (b.length) - length;
+            while (b.length > residualLength) {
+              [b, type, field] = getProtoElements2(b);
+              switch (field) {
+                case 1:
+                case 3:
+                case 4:
+                  [b, v] = getValue(b); // ignore
+                  break;
+                case 2: {
+                  [b, length] = getVarint2(b);
+                  const residualLength = (b.length) - length;
+                  while (b.length > residualLength) {
+                    [b, type, field] = getProtoElements2(b);
+                    switch (field) {
+                      case 2:
+                      case 4:
+                        [b, s] = getString(b);  // ignore
+                        break;
+                      case 5:
+                        [b, v] = getValue(b); // ignore
+                        break;
+                      case 7: {
+                        [b, length] = getVarint2(b);
+                        const residualLength = (b.length) - length;
+                        while (b.length > residualLength) {
+                          [b, type, field] = getProtoElements2(b);
+                          switch (field) {
+                            case 1:
+                              [b, s] = getString(b);  // ignore
+                              break;
+                            case 2: {
+                              [b, length] = getVarint2(b);
+                              const residualLength = (b.length) - length;
+                              while (b.length > residualLength) {
+                                [b, type, field] = getProtoElements2(b);
+                                switch (field) {
+                                  case 1:
+                                    [b, v] = getValue(b); // ignore
+                                    break;
+
+                                  default:
+                                    debugLog(pA, 'cluing', 1, 'unknown schedule field ' + field);
+                                }
+                              }
+                              break;
+                            }
+
+                            default:
+                              debugLog(pA, 'cluing', 1, 'unknown schedule field ' + field);
+                              break;
+                          }
+                        }
+                        break;
+                      }
+
+                      default:
+                        debugLog(pA, 'cluing', 1, 'unknown schedule field ' + field);
+                        break;
+                    }
+                  }
+                  break;
+                }
+
+                default:
+                  debugLog(pA, 'cluing', 1, 'unknown schedule field ' + field);
+                  break;
+              }
+            }
+          } else {
+            debugLog(pA, 'cluing', 1, 'unexpected sub level 2 field: ' + field);
+          }
+        }
+      } else if (field === 5) { // seconds since unix epoch
+        [b, v] = getValue(b); // ignore
+      } else if (field === 6) { // 32-byte hash
+        [b, s] = getString(b);  // ignore
+      } else {
+        debugLog(pA, 'cluing', 1, 'surprise field: ' + field);
+      }
+
+      if (b.length > 0) {
+        [b, type, field] = getProtoElements2(b);
+      }
+    }
+  } else {
+    debugLog(pA, 'redflags', 1, 'top level message, expected field "2", got field "' + field + '"');
+  }
+}
+
+function doUnknownField(b: Buffer, type: number, pA: BigAssFans_i6PlatformAccessory) {
+  if (type === 0) {
+    let value: number;
+    [b, value] = getVarint2(b);
+    debugLog(pA, 'cluing', 1, ' value: ' + value);
+  } else if (type === 1) {
+    debugLog(pA, 'cluing', 1, ' value: ' + hexFormat(b.subarray(0, 8)));
+    b = b.subarray(8);
+  } else if (type === 2) {
+    let length: number;
+    [b, length] = getVarint2(b);
+    debugLog(pA, 'cluing', 1, ' length: ' + length);
+    b = b.subarray(length);
+  } else if (type === 3 || type === 4) {
+    debugLog(pA, 'cluing', 1, ' deprecated group type');
+  } else if (type === 5) {
+    debugLog(pA, 'cluing', 1, ' value: ' + hexFormat(b.subarray(0, 4)));
+    b = b.subarray(4);
+  }
+  return b;
+}
+
+function getString(b: Buffer) : [Buffer, string] {
+  let length: number;
+  [b, length] = getVarint2(b);
+  return [b.subarray(length), b.subarray(0, length).toString()];
+}
+
+function getValue(b: Buffer) : [Buffer, number] {
+  let varInt: number;
+  [b, varInt] = getVarint2(b);
+
+  return [b, varInt];
 }
