@@ -118,7 +118,8 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     if (accessory.context.device.dimToWarm) {
-      hbLog.warn('use of "dimToWarm" configuration attribute is deprecated, please use "showDimToWarmSwitch" instead');
+      hbLog.warn(accessory.context.device.name +
+          '- use of "dimToWarm" configuration attribute is deprecated, please use "showDimToWarmSwitch" instead');
       this.showDimToWarmSwitch = true;
     }
     if (accessory.context.device.showDimToWarmSwitch) {
@@ -126,7 +127,8 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     if (accessory.context.device.fanAuto) {
-      hbLog.warn('use of "fanAuto" configuration attribute is deprecated, please use "showFanAutoSwitch" instead');
+      hbLog.warn(accessory.context.device.name +
+        '- use of "fanAuto" configuration attribute is deprecated, please use "showFanAutoSwitch" instead');
       this.showFanAutoSwitch = true;
     }
     if (accessory.context.device.showFanAutoSwitch) {
@@ -135,7 +137,8 @@ export class BigAssFans_i6PlatformAccessory {
 
 
     if (accessory.context.device.lightAuto) {
-      hbLog.warn('use of "lightAuto" configuration attribute is deprecated, please use "showLightAutoSwitch" instead');
+      hbLog.warn(accessory.context.device.name +
+        '- use of "lightAuto" configuration attribute is deprecated, please use "showLightAutoSwitch" instead');
       this.showLightAutoSwitch = true;
     }
     if (accessory.context.device.showLightAutoSwitch) {
@@ -143,7 +146,8 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     if (accessory.context.device.ecoMode) {
-      hbLog.warn('use of "ecoMode" configuration attribute is deprecated, please use "showEcoModeSwitch" instead');
+      hbLog.warn(accessory.context.device.name +
+        '- use of "ecoMode" configuration attribute is deprecated, please use "showEcoModeSwitch" instead');
       this.showEcoModeSwitch = true;
     }
     if (accessory.context.device.showEcoModeSwitch) {
@@ -291,6 +295,7 @@ export class BigAssFans_i6PlatformAccessory {
     } else {
       const service = this.accessory.getService('lightAutoSwitch');
       if (service) {
+        debugLog(this, 'light', 1, 'removeService: lightAutoSwitch');
         this.accessory.removeService(service);
       }
     }
@@ -712,11 +717,14 @@ function sortFunction(a, b) {
 
 function bulbPresent(value: boolean, pA:BigAssFans_i6PlatformAccessory) {
   if (value) {
+    debugLog(pA, 'light', 1, 'light detected');
     infoLogOnce(pA, 'light detected');
   } else {
     infoLogOnce(pA, 'no light detected');
+    debugLog(pA, 'light', 1, 'no light detected');
     const service = pA.accessory.getService(pA.platform.Service.Lightbulb);
     if (service) {
+      debugLog(pA, 'light', 1, 'remove service: Lightbulb');
       pA.accessory.removeService(service);
     }
   }
@@ -1397,7 +1405,7 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
               }
 
               case 17: { // capabilities (include light pressence)
-                let hasBulb = true;
+                let hasBulb = false;
                 [b, length] = getVarint2(b);
                 const remainingLength = (b.length) - length;
                 while (b.length > remainingLength) {
@@ -1411,10 +1419,11 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
                     case 14:
                       [b, v] = getValue(b);  // ignore
                       break;
+
                     case 4:
                       [b, v] = getValue(b);  // bulb not equipped
                       if (v === 1) {
-                        hasBulb = false;
+                        hasBulb = true;
                       } else {
                         debugLog(pA, 'redflags', 1, 'unexpected bulb pressence value: ' + v);
                       }
@@ -1425,8 +1434,8 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
                       b = b.subarray(b.length - remainingLength);
                       break;
                   }
-                  bulbPresent(hasBulb, pA);
                 }
+                bulbPresent(hasBulb, pA);
                 break;
               }
 

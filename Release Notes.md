@@ -1,6 +1,6 @@
 ## Release Notes
 
-## v0.5.0-beta1
+## v0.5.0-beta2
 message parsing engine re-written taking into account message are formatted as Protocol Buffers - thanks to @bdraco for
 suggesting protobufs and @jfroy for building a working implementation.
 
