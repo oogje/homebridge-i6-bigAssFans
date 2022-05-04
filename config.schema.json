@@ -46,25 +46,25 @@
               ],
               "required": false
             },      
-            "whoosh": {
+            "showWhooshSwitch": {
               "title": "Whoosh Switch",
               "description": "Add a switch for 'Whoosh Mode'",
               "type": "boolean",
               "default": false
             },
-            "fanAuto": {
+            "showFanAutoSwitch": {
               "title": "Fan Auto Switch",
               "description": "Add a switch for 'Fan Auto'",
               "type": "boolean",
               "default": false
             },
-            "lightAuto": {
+            "showLightAutoSwitch": {
               "title": "Light Auto Switch",
               "description": "Add a switch for 'Light Auto'",
               "type": "boolean",
               "default": false
             },
-            "dimToWarm": {
+            "showDimToWarmSwitch": {
               "title": "Dim to Warm Switch",
               "description": "Add a switch for 'Dim to Warm'",
               "type": "boolean",
@@ -73,7 +73,7 @@
                 "functionBody": "return model.fans[arrayIndices].fanModel !== 'Haiku L Series' && model.fans[arrayIndices].fanModel !== 'Haiku H/I Series';"
               }
             },
-            "ecoMode": {
+            "showEcoModeSwitch": {
               "title": "Eco Mode Switch",
               "description": "Add a switch for 'Eco to Mode'",
               "type": "boolean",
