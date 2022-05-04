@@ -94,19 +94,19 @@ Example configuration with optional params and multiple fans:
                     "name": "Big Fan i6",
                     "mac": "20:F8:5E:00:00:00",
                     "ip": "BigFani6.local",
-                    "fanAuto": true,
-                    "lightAuto": true,
-                    "whoosh": false,
-                    "dimToWarm": false
+                    "showFanAutoSwitch": true,
+                    "showLightAutoSwitch": true,
+                    "showWhooshSwitch": false,
+                    "showDimToWarmSwitch": false
                   },
                   {
                     "name": "BigAssFans Haiku",
                     "mac": "20:F8:5E:00:00:01",
                     "ip": "192.168.1.151",
-                    "fanAuto": true,
-                    "lightAuto": true,
-                    "whoosh": true,
-                    "ecoMode": true
+                    "showFanAutoSwitch": true,
+                    "showLightAutoSwitch": true,
+                    "showWhooshSwitch": true,
+                    "showEcoModeSwitch": true
                    }
                 ]
     }
@@ -129,15 +129,15 @@ Name of your fan.
 IP address or hostname of your fan.  IP address can be found in the Big Ass Fans app's Wi-Fi settings screen.
 * `mac` [required]
 MAC address of your fan.  Can be found in the Big Ass Fans app's Wi-Fi settings screen.
-* `whoosh` [optional]
+* `showWhooshSwitch` [optional]
 Adds accessory switch for Whoosh Mode (true/false, defaults to false).
-* `dimToWarm` [optional]
+* `showDimToWarmSwitch` [optional]
 Adds accessory switch for Dim to Warm (true/false, defaults to false).
-* `fanAuto` [optional]
+* `showFanAutoSwitch` [optional]
 Adds accessory switch for the fan's Fan Auto mode (true/false, defaults to false).
-* `lightAuto` [optional]
+* `showLightAutoSwitch` [optional]
 Adds accessory switch for the fan's Light Auto mode (true/false, defaults to false).
-* `ecoMode` [optional]
+* `showEcoModeSwitch` [optional]
 Adds accessory switch for the fan's Eco mode (true/false, defaults to false).
 
 #### Advanced Configuration Fields
@@ -162,6 +162,10 @@ homebridge -D
 ```
 
 ## Special thanks
+
+[@bdraco](https://github.com/bdraco) for suggesting BAF is using protobufs and [@jfroy](https://github.com/jfroy) for building a working BAF controller using protobufs.
+
+@pponce, without whom there would be no Haiku implementation and a lot less testing, and for generally being an awesome collaborator.
 
 [homebridge-miot](https://github.com/merdok/homebridge-miot) - whose style served as a guide.
 
