@@ -1,5 +1,8 @@
 ## Release Notes
 
+## v0.5.0-beta3
+addresses the bug described in Issue #9 where turning on Auto Light with `showAutoLight` configuration attribute `false` crashes homebridge
+
 ## v0.5.0-beta2
 message parsing engine re-written taking into account message are formatted as Protocol Buffers - thanks to @bdraco for
 suggesting protobufs and @jfroy for building a working implementation.
