@@ -796,7 +796,7 @@ function firmwareVersion(value: string, pA: BigAssFans_i6PlatformAccessory) {
 
 function lightColorTemperature(value: number, pA:BigAssFans_i6PlatformAccessory) {
   if (!pA.accessory.getService(pA.platform.Service.Lightbulb)) {
-    debugLog(pA, 'newcode', 1, 'no lightBulbService');
+    debugLog(pA, 'newcode', 1, 'lightColorTemperature: no lightbulb Service');
     return;
   }
   if (pA.Model !== MODEL_HAIKU_HI && pA.Model !== MODEL_HAIKU_L) {
@@ -810,6 +810,11 @@ function lightColorTemperature(value: number, pA:BigAssFans_i6PlatformAccessory)
 }
 
 function lightBrightness(value: number, pA:BigAssFans_i6PlatformAccessory) {
+  if (!pA.accessory.getService(pA.platform.Service.Lightbulb)) {
+    debugLog(pA, 'newcode', 1, 'lightBrightness: no lightbulb Service');
+    return;
+  }
+
   if (value !== 0) {
     pA.lightStates.homeShieldUp = false;
     pA.lightStates.Brightness = (value as number);
@@ -832,6 +837,11 @@ function lightBrightness(value: number, pA:BigAssFans_i6PlatformAccessory) {
 function lightOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
   debugLog(pA, 'light', 1, 'lightOnState value: ' + value);
 
+  if (!pA.accessory.getService(pA.platform.Service.Lightbulb)) {
+    debugLog(pA, 'newcode', 1, 'lightOnState: no lightbulb Service');
+    return;
+  }
+
   if (value === 0 || value === 1) {
     const onValue = (value === 0 ? false : true);
     if (onValue !== pA.lightStates.On) {
@@ -845,7 +855,7 @@ function lightOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
       debugLog(pA, ['light', 'characteristics'], [1, 3], 'update light auto switch off: ' + pA.lightAutoSwitchOn);
       pA.lightAutoSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightAutoSwitchOn);
     }
-  } else if (value === 2 && pA.lightAutoSwitchOn === false) {
+  } else if (pA.showLightAutoSwitch && value === 2 && pA.lightAutoSwitchOn === false) {
     pA.lightAutoSwitchOn = true;
     debugLog(pA, ['light', 'characteristics'], [1, 3], 'update light auto switch on: ' + pA.lightAutoSwitchOn);
     pA.lightAutoSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightAutoSwitchOn);
@@ -929,7 +939,8 @@ function fanRotationSpeed(value: number, pA:BigAssFans_i6PlatformAccessory) {
 }
 
 function currentTemperature(value: number, pA:BigAssFans_i6PlatformAccessory) {
-  if (pA.accessory.getService(pA.platform.Service.TemperatureSensor) === undefined) {
+  if (!pA.accessory.getService(pA.platform.Service.TemperatureSensor)) {
+    debugLog(pA, 'newcode', 1, 'currentTemperature: no TemperatureSensor Service');
     return;
   }
   if (pA.accessory.context.device.showTemperature !== undefined && pA.accessory.context.device.showTemperature === false) {
@@ -954,6 +965,12 @@ function currentTemperature(value: number, pA:BigAssFans_i6PlatformAccessory) {
 
 function currentRelativeHumidity(value: number, pA:BigAssFans_i6PlatformAccessory) {
   debugLog(pA, 'humidity', 2, pA.Name + ' - CurrentRelativeHumidity:' + value);
+
+  if (!pA.accessory.getService(pA.platform.Service.HumiditySensor)) {
+    debugLog(pA, 'newcode', 1, 'currentRelativeHumidity: no HumiditySensor Service');
+    return;
+  }
+
 
   if (value < 0 || value > 100) {
     // Haikus don't seem to support the humidity sensor, they just report 1000%.  ignore it
@@ -1277,6 +1294,7 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
               case 4: // local datetime
               case 5: // zulu datetime
               case 8: // MAC address
+              case 10:  // fan's UUID
               case 11:  // website - api.bigassfans.com
               case 120: // IP address
                 [b, s] = getString(b);  // ignore
@@ -1310,7 +1328,6 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
               // mystery strings
               case 6:
               case 9:
-              case 10:
               case 13:
               case 37:
               case 56:
