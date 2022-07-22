@@ -1,5 +1,8 @@
 ## Release Notes
 
+## v0.5.1
+same as v0.5.0-beta3 but with typo fixes in comments and nascent ideas for es6 support
+
 ## v0.5.0-beta3
 addresses the bug described in Issue #9 where turning on Auto Light with `showAutoLight` configuration attribute `false` crashes homebridge
 

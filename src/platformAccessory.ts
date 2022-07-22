@@ -19,6 +19,8 @@ const MODEL_HAIKU_HI = 'Haiku H/I Series';
 export class BigAssFans_i6PlatformAccessory {
   public fanService!: Service;
   public lightBulbService!: Service;
+  public fooService!: Service;
+  public lightSelectorService!: Service;
   public humiditySensorService!: Service;
   public temperatureSensorService!: Service;
   public whooshSwitchService!: Service;
@@ -44,6 +46,7 @@ export class BigAssFans_i6PlatformAccessory {
 
   public showWhooshSwitch = false;
   public whooshSwitchOn = false;
+  public fooOn = 0;
   public showDimToWarmSwitch = false;
   public dimToWarmSwitchOn = false;
   public showFanAutoSwitch = false;
@@ -79,7 +82,6 @@ export class BigAssFans_i6PlatformAccessory {
   public client;
   public oneByteHeaders:number[] = [];
 
-
   mysteryProperties: string|number[] = [];  // to keep track of when they change - for hints to eventually figure out what they mean
 
   constructor(
@@ -92,13 +94,13 @@ export class BigAssFans_i6PlatformAccessory {
     this.Name = accessory.context.device.name;
 
     // defaults and enumeration of debugging keys
-    this.debugLevels['light'] = 0;
-    this.debugLevels['cluing'] = 0;
+    this.debugLevels['light'] = 0; // 2;
+    this.debugLevels['cluing'] = 0; // 6;
     this.debugLevels['network'] = 0;
     this.debugLevels['newcode'] = 0;
     this.debugLevels['humidity'] = 0;
     this.debugLevels['progress'] = 0;
-    this.debugLevels['redflags'] = 0;
+    this.debugLevels['redflags'] = 0; // 1;
     this.debugLevels['noopcodes'] = 0;
     this.debugLevels['characteristics'] = 0;
 
@@ -134,7 +136,6 @@ export class BigAssFans_i6PlatformAccessory {
     if (accessory.context.device.showFanAutoSwitch) {
       this.showFanAutoSwitch = true; // defaults to false in property initialization
     }
-
 
     if (accessory.context.device.lightAuto) {
       hbLog.warn(accessory.context.device.name +
@@ -174,6 +175,24 @@ export class BigAssFans_i6PlatformAccessory {
     this.accessory.getService(this.platform.Service.AccessoryInformation)!
       .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Big Ass Fans')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, this.MAC);
+
+    // es6 up/downlight selector
+    // this.lightSelectorService = this.accessory.getService(this.platform.Service.SecuritySystem) ||
+    //   this.accessory.addService(this.platform.Service.SecuritySystem);
+    // this.lightSelectorService.getCharacteristic(this.platform.Characteristic.SecuritySystemCurrentState)
+    //   .onGet(this.handleProgrammableSwitchEventGet.bind(this));
+    // this.lightSelectorService.getCharacteristic(this.platform.Characteristic.SecuritySystemTargetState)
+    //   .onGet(this.handleProgrammableSwitchOutputStateGet.bind(this))
+    //   .onSet(this.handleProgrammableSwitchOutputStateSet.bind(this));
+
+    // this.fooService = this.accessory.getService('foo') ||
+    //   this.accessory.addService(this.platform.Service.Switch, 'foo', 'foo-1');
+    // this.fooService.setCharacteristic(this.platform.Characteristic.Name, 'foo switch');
+
+    // this.fooService.getCharacteristic(this.platform.Characteristic.On)
+    //   .onSet(this.setFooOnState.bind(this))
+    //   .onGet(this.getFooOnState.bind(this));
+
 
     // Fan
     this.fanService = this.accessory.getService(this.platform.Service.Fan) ||
@@ -326,6 +345,48 @@ export class BigAssFans_i6PlatformAccessory {
   * 'SET' request is issued when HomeKit wants us to change the state of an accessory.
   * 'GET' request is issued  when HomeKit wants to know the state of an accessory.
   */
+  //  async setFooOnState(value: CharacteristicValue) {
+  //   hbLog.debug('Set Characteristic foo Switch On -> ' + value);
+  //   if (this.fooOn == 0) {
+  //     hbLog.debug('down')
+  //     this.fooOn = 1; // down
+  //     this.fooService.setCharacteristic(this.platform.Characteristic.Name, 'downlight');
+  //   } else if (this.fooOn == 1) {
+  //     hbLog.debug('up')
+  //     this.fooOn = 2; // up
+  //     this.fooService.setCharacteristic(this.platform.Characteristic.Name, 'uplight');
+  //   } else if (this.fooOn == 2) {
+  //     hbLog.debug('both')
+  //     this.fooOn = 0; // both
+  //     this.fooService.setCharacteristic(this.platform.Characteristic.Name, 'both');
+  //   }
+  // }
+  // async getFooOnState(): Promise<CharacteristicValue> {
+  //   // hbLog.debug('Get Characteristic foo Switch On -> ' + this.fooOn);
+  //   return 1;
+  // }
+  // async handleProgrammableSwitchEventGet() {
+  //   hbLog.debug('Triggered GET ProgrammableSwitchEvent');
+
+
+  //   return this.fooOn;
+  // }
+  // async handleProgrammableSwitchOutputStateGet() {
+  //   hbLog.debug('Triggered GET ProgrammableSwitchOutputState');
+
+  //   return this.fooOn;
+  // }
+  // async handleProgrammableSwitchOutputStateSet(value) {
+  //   hbLog.debug('Triggered SET ProgrammableSwitchOutputState:' + value);
+  //   if (value == 0) {
+  //     hbLog.debug('both')
+  //   } else if (value == 1) {
+  //     hbLog.debug('down')
+  //   } else if (value == 2) {
+  //     hbLog.debug('up')
+  //   }
+  //   this.fooOn = value;
+  // }
 
   async setLightOnState(value: CharacteristicValue) {
     debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Light On -> ' + value);
@@ -1016,6 +1077,27 @@ function ecoModeOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
   }
 }
 
+// function lightSelector(value: number, pA: BigAssFans_i6PlatformAccessory) {
+//   switch (value) {
+//     case 0:
+//       pA.fooOn == 0;
+//       pA.lightSelectorService.setCharacteristic(pA.platform.Characteristic.SecuritySystemCurrentState, 0);
+//       break;
+//     case 1:
+//       pA.fooOn == 1;
+//       pA.lightSelectorService.setCharacteristic(pA.platform.Characteristic.SecuritySystemCurrentState, 1);
+//       break;
+//     case 2:
+//       pA.fooOn == 2;
+//       pA.lightSelectorService.setCharacteristic(pA.platform.Characteristic.SecuritySystemCurrentState, 2);
+//      break
+//     default:
+//       debugLog(pA, 'redflags', 0, 'unknown light selector value' + value);
+//       pA.lightSelectorService.setCharacteristic(pA.platform.Characteristic.SecuritySystemCurrentState, 3);
+//       break;
+//   }
+// }
+
 // keeping track to gather clues in unending effort to ID unknown codes
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function mysteryCode(value: string, pA:BigAssFans_i6PlatformAccessory, code: string) {
@@ -1280,6 +1362,10 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
                 [b, v] = getValue(b);
                 dimToWarmOnState(v, pA);
                 break;
+              case 82: // lightSelector
+                [b, v] = getValue(b);
+                // lightSelector(v, pA);
+                break;
               case 86:  // temperature
                 [b, v] = getValue(b);
                 currentTemperature(v / 100, pA);
@@ -1359,7 +1445,8 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
               case 62:
               case 64:
               case 72:
-              case 82:
+              // case 82:
+              /* falls through */
               case 89:
               case 118:
               case 121:
@@ -1438,7 +1525,7 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
                       break;
 
                     case 4:
-                      [b, v] = getValue(b);  // bulb not equipped
+                      [b, v] = getValue(b);  // bulb equipped?
                       if (v === 1) {
                         hasBulb = true;
                       } else {
@@ -1447,7 +1534,7 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
                       break;
 
                     default:
-                      debugLog(pA, 'cluing', 1, 'fell into default, field 171 message with subfield: "' + field + '"');
+                      debugLog(pA, 'cluing', 1, 'fell into default, field 17 message with subfield: "' + field + '"');
                       b = b.subarray(b.length - remainingLength);
                       break;
                   }

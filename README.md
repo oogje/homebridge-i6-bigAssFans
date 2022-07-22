@@ -41,7 +41,7 @@ Occasionally HomeKit will briefly show the light (if equipped) or the light auto
 * Turn Dim to Warm on or off (i6 Fans).
 * Turn Fan Auto mode on or off.
 * Turn Light Auto mode on or off.
-* Turn Eco Mode on or off (Haiku fans only).
+* Turn Eco Mode on or off (Haiku fans).
 
 ### **Installation**
 
