@@ -55,6 +55,7 @@ export class BigAssFans_i6PlatformAccessory {
   public lightAutoSwitchOn = false;
   public showEcoModeSwitch = false;
   public ecoModeSwitchOn = false;
+  public disableDirectionControl = false;
 
   public showTemperature = true;
 
@@ -101,6 +102,7 @@ export class BigAssFans_i6PlatformAccessory {
     this.debugLevels['humidity'] = 0;
     this.debugLevels['progress'] = 0;
     this.debugLevels['redflags'] = 0; // 1;
+    this.debugLevels['direction'] = 0; // 1
     this.debugLevels['noopcodes'] = 0;
     this.debugLevels['characteristics'] = 0;
 
@@ -160,6 +162,10 @@ export class BigAssFans_i6PlatformAccessory {
       debugLog(this, 'progress',  1, 'set ProbeFrequency to: ' + this.ProbeFrequency);
     }
 
+    if (accessory.context.device.disableDirectionControl) {
+      this.disableDirectionControl = true;
+    }
+
     /**
     * set accessory information
     */
@@ -207,9 +213,16 @@ export class BigAssFans_i6PlatformAccessory {
       .onSet(this.setRotationSpeed.bind(this))
       .onGet(this.getRotationSpeed.bind(this));
 
-    this.fanService.getCharacteristic(this.platform.Characteristic.RotationDirection)
-      .onSet(this.setRotationDirection.bind(this))
-      .onGet(this.getRotationDirection.bind(this));
+    if (this.disableDirectionControl) {
+      // for now am commenting out this 'removeCharacteristic' line because it doesn't remove the control anyway and if it did
+      // I'd probably need to disable the update of the control in fanRotationDirection().  As it stands, fanRotationDirection()
+      // lets us know if the direction changes via remote or BAF app.
+      // this.fanService.removeCharacteristic(this.fanService.getCharacteristic(this.platform.Characteristic.RotationDirection));
+    } else {
+      this.fanService.getCharacteristic(this.platform.Characteristic.RotationDirection)
+        .onSet(this.setRotationDirection.bind(this))
+        .onGet(this.getRotationDirection.bind(this));
+    }
 
     // Light Bulb
     this.lightBulbService = this.accessory.getService(this.platform.Service.Lightbulb) ||
@@ -921,34 +934,6 @@ function lightOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
     debugLog(pA, ['light', 'characteristics'], [1, 3], 'update light auto switch on: ' + pA.lightAutoSwitchOn);
     pA.lightAutoSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightAutoSwitchOn);
   }
-
-  // if (value === 2 && pA.lightAutoSwitchOn) {
-  //   pA.lightStates.On = true;
-  //   debugLog(pA, 'light', 1, '(value === 2 && pA.lightAutoSwitchOn): ' + pA.lightStates.On);
-  //   debugLog(pA, ['light', 'characteristics'], [1, 3], 'update Light On: ' + pA.lightStates.On);
-  //   pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
-  //   return;
-  // }
-
-  // pA.lightAutoSwitchOn = (value === 2) ? true: false;
-  // if (pA.showLightAutoSwitch) {
-  //   debugLog(pA, ['light', 'characteristics'], [1, 3], 'update light auto switch on: ' + pA.lightAutoSwitchOn);
-  //   pA.lightAutoSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightAutoSwitchOn);
-  // }
-
-  // if (value === 2 && pA.lightStates.On) {
-  //   debugLog(pA, 'light', 1, 'ignore auto on value, the light is already on');
-  //   return;
-  // }
-
-  // if (value === 2 && !pA.lightStates.On) { // light was off, auto switch was turned on, leave the light off
-  //   return;
-  // }
-
-  // const onValue = (value === 0 ? false : true);
-  // pA.lightStates.On = onValue;
-  // debugLog(pA, ['light', 'characteristics'], [1, 3], 'update Light On: ' + pA.lightStates.On);
-  // pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
 }
 
 function fanOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
@@ -971,7 +956,7 @@ function fanRotationDirection(value: number, pA:BigAssFans_i6PlatformAccessory) 
   //  reverse switch off (0) == rotation direction counterclockwise (1)
   const rotationDirection = value === 0 ? 1 : 0;
   pA.fanStates.RotationDirection = rotationDirection;
-  debugLog(pA, 'characteristics', 3, 'update RotationDirection: ' + pA.fanStates.RotationDirection);
+  debugLog(pA, ['direction', 'characteristics'], [1, 3], 'update RotationDirection: ' + pA.fanStates.RotationDirection);
   pA.fanService.updateCharacteristic(pA.platform.Characteristic.RotationDirection, pA.fanStates.RotationDirection);
 }
 

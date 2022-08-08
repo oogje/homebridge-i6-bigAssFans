@@ -1,5 +1,8 @@
 ## Release Notes
 
+## v0.5.2-beta
+adds config attribute to ignore fan direction control `disableDirectionControl`
+
 ## v0.5.1
 same as v0.5.0-beta3 but with typo fixes in comments and nascent ideas for es6 support
 

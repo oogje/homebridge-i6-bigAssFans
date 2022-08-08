@@ -81,6 +81,12 @@
               "condition": {
                 "functionBody": "return model.fans[arrayIndices].fanModel !== 'i6';"
               }
+            },
+            "disableDirectionControl": {
+              "title": "Disable Direction Control",
+              "description": "Prevents user from changing fan direction from HomeKit.",
+              "type": "boolean",
+              "default": false
             }
           }
         }  

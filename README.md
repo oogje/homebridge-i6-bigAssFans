@@ -17,7 +17,7 @@
 
 The plugin name reflects that it was created to support, and was limited to, i6 model fans when no other homebridge
 alternative was available. 
-Some time around the beginning of April 2022, with a firmware update to the Haiku series fans, BigAssFans changed the Haiku's
+Some time around the beginning of April 2022, with a firmware update to the Haiku series fans, Big Ass Fans changed the Haiku's
 communication protocol to be compatible with the i6 model, and therefore this plugin. 
 Having access only to an i6 fan, I collaborated with Haiku fan owners (notably @pponce) to add support for their fans. 
 I've guessed the format of the binary protocol and of the approximately eighty unique message types I've seen, I think I know what about half of them mean. 
@@ -34,6 +34,7 @@ Occasionally HomeKit will briefly show the light (if equipped) or the light auto
 
 * Turn fan and/or light on or off!
 * Change speed, and direction (Keep in mind Big Ass Fans discourages reversing speed.)
+* Ability to disable the fan direction control.
 * Change brightness level of LED light.
 * Display the fan's bluetooth remote's temperature and humidity sensors (i6 only).
 * Display the fan's temperature sensors (Haiku Fans).
