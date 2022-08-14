@@ -1509,6 +1509,9 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
                       [b, v] = getValue(b);  // ignore
                       break;
 
+                    case 2: // bulb equipped for 3rd Gen Haiku H/I Series?
+                      debugLog(pA, 'cluing', 1, 'bulb equipped for 3rd Gen Haiku H/I Series?');
+                      // fall through
                     case 4:
                       [b, v] = getValue(b);  // bulb equipped?
                       if (v === 1) {

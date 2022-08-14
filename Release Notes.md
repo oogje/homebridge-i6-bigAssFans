@@ -1,6 +1,9 @@
 ## Release Notes
 
-## v0.5.2-beta
+## v0.5.2-beta2
+guessing how to recognize light presence on Haiku H/I Series Gen 3 fan.  Issue #14
+
+## v0.5.2-beta1
 adds config attribute to ignore fan direction control `disableDirectionControl`
 
 ## v0.5.1
