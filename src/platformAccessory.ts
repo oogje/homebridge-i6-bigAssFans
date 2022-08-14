@@ -1347,7 +1347,7 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
                 [b, v] = getValue(b);
                 dimToWarmOnState(v, pA);
                 break;
-              case 82: // lightSelector
+              case 82: // lightSelector?
                 [b, v] = getValue(b);
                 // lightSelector(v, pA);
                 break;
@@ -1359,6 +1359,13 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
                 [b, v] = getValue(b);
                 currentRelativeHumidity(v / 100, pA);
                 break;
+
+              // unimplemented numbers
+              case 66:  // occupancy detection (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+              case 85:  // light_occupancy_detected (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+                [b, v] = getValue(b); // ignore for now
+                break;
+
 
               // ignore strings
               case 1: // name
@@ -1382,7 +1389,7 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
               case 54:  // fan return to auto (return to auto switch)
               case 55:  // fan return to auto (return after)
               case 60:  // comfort heat assist
-              case 63:  // revolutions per minute
+              case 63:  // [target per aiobafi6] revolutions per minute
               case 70:  // brightness as level (0,1-16)
               case 73:  // light auto motion timeout (time)
               case 74:  // light return to auto (return to auto switch)
@@ -1391,7 +1398,7 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
               case 79:  // coolest color temperature
               case 134: // LED indicators
               case 135: // fan beep
-              case 136: // mystery [legacy remote enable - haiku only]?
+              case 136: // legacy_ir_remote_enable (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto) [haiku only?]
               case 150: // prevent additional controls
                 [b, v] = getValue(b); // ignore
                 break;
@@ -1399,13 +1406,13 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
               // mystery strings
               case 6:
               case 9:
-              case 13:
+              case 13:  // api version (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
               case 37:
               case 56:
               case 59:
               case 76:
               case 83:
-              case 156:
+              case 156: // stats (uptime)  (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto) but aiobafi6 says int32
                 [b, s] = getString(b);
                 debugLog(pA, 'cluing', 6, 'field ' + field + ', mystery string: ' + s);
                 break;
@@ -1426,9 +1433,9 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
               case 33:
               case 49:
               case 57:
-              case 61:
-              case 62:
-              case 64:
+              case 61:  // comfort_heat_assist_speed (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+              case 62:  // comfort_heat_assist_reverse_enable (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+              case 64:  // current_rpm (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
               case 72:
               // case 82:
               /* falls through */
@@ -1468,8 +1475,8 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
                 break;
               }
 
-              case 16:
-              case 152: {
+              case 16:  // firmware (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+              case 152: { // remote_firmware (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
                 [b, length] = getVarint2(b);
                 const remainingLength = (b.length) - length;
                 while (b.length > remainingLength) {
@@ -1485,7 +1492,7 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
                       break;
 
                     default:
-                      debugLog(pA, 'cluing', 1, 'fell into default, field 152 message with subfield: "' + field + '"');
+                      debugLog(pA, 'cluing', 1, 'fell into default, field 16 or 152 message with subfield: "' + field + '"');
                       b = b.subarray(b.length - remainingLength);
                       break;
                   }
@@ -1511,7 +1518,7 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
 
                     case 2: // bulb equipped for 3rd Gen Haiku H/I Series?
                       debugLog(pA, 'cluing', 1, 'bulb equipped for 3rd Gen Haiku H/I Series?');
-                      // fall through
+                      // falls through
                     case 4:
                       [b, v] = getValue(b);  // bulb equipped?
                       if (v === 1) {
