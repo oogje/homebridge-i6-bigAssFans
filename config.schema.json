@@ -40,12 +40,13 @@
               "default": "other",
               "oneOf": [
                 { "title": "i6", "enum": ["i6"] },
+                { "title": "es6", "enum": ["es6"] },
                 { "title": "Haiku L Series", "enum": ["Haiku L Series"] },
                 { "title": "Haiku H/I Series", "enum": ["Haiku H/I Series"] },
                 { "title": "Model Not Listed", "enum": ["other"] }
               ],
               "required": false
-            },      
+            },
             "showWhooshSwitch": {
               "title": "Whoosh Switch",
               "description": "Add a switch for 'Whoosh Mode'",

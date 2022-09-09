@@ -12,15 +12,30 @@ const MAXFANSPEED = 7;
 
 const ONEBYTEHEADER = [0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03];
 
-const MODEL_i6 =       'i6';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const MODEL_I6 =       'i6';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const MODEL_ES6 =      'es6';
 const MODEL_HAIKU_L =  'Haiku L Series';
 const MODEL_HAIKU_HI = 'Haiku H/I Series';
 
+const TARGETLIGHT_BOTH = 0;
+const TARGETLIGHT_DOWN = 1;
+const TARGETLIGHT_UP = 2;
+
+interface lightStates {
+  On: boolean;
+  Brightness: number; // percent
+  ColorTemperature: number;
+  homeShieldUp: boolean;  // used to prevent Home.app from turning light on at 100% when it's at zero percent.
+}
+
+type BAF = BigAssFans_i6PlatformAccessory;
+
 export class BigAssFans_i6PlatformAccessory {
   public fanService!: Service;
-  public lightBulbService!: Service;
-  public fooService!: Service;
-  public lightSelectorService!: Service;
+  public downlightBulbService!: Service;
+  public uplightBulbService!: Service;
   public humiditySensorService!: Service;
   public temperatureSensorService!: Service;
   public whooshSwitchService!: Service;
@@ -29,7 +44,14 @@ export class BigAssFans_i6PlatformAccessory {
   public lightAutoSwitchService!: Service;
   public ecoModeSwitchService!: Service;
 
-  public lightStates = {
+  public downlightStates: lightStates = {
+    On: false,
+    Brightness: 1,  // percent
+    ColorTemperature: 2200,
+    homeShieldUp: false,  // used to prevent Home.app from turning light on at 100% when it's at zero percent.
+  };
+
+  public uplightStates: lightStates  = {
     On: false,
     Brightness: 1,  // percent
     ColorTemperature: 2200,
@@ -46,7 +68,6 @@ export class BigAssFans_i6PlatformAccessory {
 
   public showWhooshSwitch = false;
   public whooshSwitchOn = false;
-  public fooOn = 0;
   public showDimToWarmSwitch = false;
   public dimToWarmSwitchOn = false;
   public showFanAutoSwitch = false;
@@ -72,13 +93,16 @@ export class BigAssFans_i6PlatformAccessory {
   public Model = 'model not yet established';
   public SSID = 'apname';
   public Firmware = '';
-  public OldProtocolFlag:boolean|undefined = undefined;
+  // public OldProtocolFlag:boolean|undefined = undefined;
 
   public debugLevel = 1;
   public debugLevels:number[] = [];
 
   public CurrentTemperature = 0;
   public CurrentRelativeHumidity = 0;
+
+  public bulbCount = 1;
+  public targetBulb = 1;
 
   public client;
   public oneByteHeaders:number[] = [];
@@ -104,6 +128,7 @@ export class BigAssFans_i6PlatformAccessory {
     this.debugLevels['redflags'] = 0; // 1;
     this.debugLevels['direction'] = 0; // 1
     this.debugLevels['noopcodes'] = 0;
+    this.debugLevels['protoparse'] = 0; // 1
     this.debugLevels['characteristics'] = 0;
 
     if (this.accessory.context.device.debugLevels !== undefined) {
@@ -170,6 +195,8 @@ export class BigAssFans_i6PlatformAccessory {
     * set accessory information
     */
 
+    // I've forgotten the point of specifying a model name in the config file (unless it's devModelOverride) put
+    // am not ready to delete this code yet.
     debugLog(this, 'newcode', 1, 'user supplied model: ' + this.accessory.context.device.fanModel);
     if (this.accessory.context.device.fanModel !== undefined && this.accessory.context.device.fanModel !== 'other') {
       this.Model = this.accessory.context.device.fanModel;
@@ -181,24 +208,6 @@ export class BigAssFans_i6PlatformAccessory {
     this.accessory.getService(this.platform.Service.AccessoryInformation)!
       .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Big Ass Fans')
       .setCharacteristic(this.platform.Characteristic.SerialNumber, this.MAC);
-
-    // es6 up/downlight selector
-    // this.lightSelectorService = this.accessory.getService(this.platform.Service.SecuritySystem) ||
-    //   this.accessory.addService(this.platform.Service.SecuritySystem);
-    // this.lightSelectorService.getCharacteristic(this.platform.Characteristic.SecuritySystemCurrentState)
-    //   .onGet(this.handleProgrammableSwitchEventGet.bind(this));
-    // this.lightSelectorService.getCharacteristic(this.platform.Characteristic.SecuritySystemTargetState)
-    //   .onGet(this.handleProgrammableSwitchOutputStateGet.bind(this))
-    //   .onSet(this.handleProgrammableSwitchOutputStateSet.bind(this));
-
-    // this.fooService = this.accessory.getService('foo') ||
-    //   this.accessory.addService(this.platform.Service.Switch, 'foo', 'foo-1');
-    // this.fooService.setCharacteristic(this.platform.Characteristic.Name, 'foo switch');
-
-    // this.fooService.getCharacteristic(this.platform.Characteristic.On)
-    //   .onSet(this.setFooOnState.bind(this))
-    //   .onGet(this.getFooOnState.bind(this));
-
 
     // Fan
     this.fanService = this.accessory.getService(this.platform.Service.Fan) ||
@@ -224,23 +233,24 @@ export class BigAssFans_i6PlatformAccessory {
         .onGet(this.getRotationDirection.bind(this));
     }
 
-    // Light Bulb
-    this.lightBulbService = this.accessory.getService(this.platform.Service.Lightbulb) ||
-      this.accessory.addService(this.platform.Service.Lightbulb);
+    // Downlight Bulb
+    // We the downlight is present and we'll delete it later if we find out there isn't one.
+    this.downlightBulbService = this.accessory.getService('downlight') ||
+      this.accessory.addService(this.platform.Service.Lightbulb, 'downlight', 'light-1');
     accessoryName = capitalizeName ? ' Light' : ' light';
-    this.lightBulbService.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name + accessoryName);
+    this.downlightBulbService.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name + accessoryName);
 
-    this.lightBulbService.getCharacteristic(this.platform.Characteristic.On)
-      .onSet(this.setLightOnState.bind(this))                // SET - bind to the `setLightOnState` method below
-      .onGet(this.getLightOnState.bind(this));               // GET - bind to the `getOn` method below
+    this.downlightBulbService.getCharacteristic(this.platform.Characteristic.On)
+      .onSet(this.setDownLightOnState.bind(this))
+      .onGet(this.getDownLightOnState.bind(this));
 
-    this.lightBulbService.getCharacteristic(this.platform.Characteristic.Brightness)
-      .onSet(this.setBrightness.bind(this))
-      .onGet(this.getBrightness.bind(this));
+    this.downlightBulbService.getCharacteristic(this.platform.Characteristic.Brightness)
+      .onSet(this.setDownBrightness.bind(this))
+      .onGet(this.getDownBrightness.bind(this));
 
-    this.lightBulbService.getCharacteristic(this.platform.Characteristic.ColorTemperature)
-      .onSet(this.setColorTemperature.bind(this))
-      .onGet(this.getColorTemperature.bind(this));
+    this.downlightBulbService.getCharacteristic(this.platform.Characteristic.ColorTemperature)
+      .onSet(this.setDownColorTemperature.bind(this))
+      .onGet(this.getDownColorTemperature.bind(this));
 
     // Current Temperature
     debugLog(this, 'newcode', 1, 'this.accessory.context.device.showTemperature: ' + this.accessory.context.device.showTemperature);
@@ -354,97 +364,113 @@ export class BigAssFans_i6PlatformAccessory {
     debugLog(this, 'progress', 2, 'constructed');
   }
 
-  /**
-  * 'SET' request is issued when HomeKit wants us to change the state of an accessory.
-  * 'GET' request is issued  when HomeKit wants to know the state of an accessory.
-  */
-  //  async setFooOnState(value: CharacteristicValue) {
-  //   hbLog.debug('Set Characteristic foo Switch On -> ' + value);
-  //   if (this.fooOn == 0) {
-  //     hbLog.debug('down')
-  //     this.fooOn = 1; // down
-  //     this.fooService.setCharacteristic(this.platform.Characteristic.Name, 'downlight');
-  //   } else if (this.fooOn == 1) {
-  //     hbLog.debug('up')
-  //     this.fooOn = 2; // up
-  //     this.fooService.setCharacteristic(this.platform.Characteristic.Name, 'uplight');
-  //   } else if (this.fooOn == 2) {
-  //     hbLog.debug('both')
-  //     this.fooOn = 0; // both
-  //     this.fooService.setCharacteristic(this.platform.Characteristic.Name, 'both');
-  //   }
-  // }
-  // async getFooOnState(): Promise<CharacteristicValue> {
-  //   // hbLog.debug('Get Characteristic foo Switch On -> ' + this.fooOn);
-  //   return 1;
-  // }
-  // async handleProgrammableSwitchEventGet() {
-  //   hbLog.debug('Triggered GET ProgrammableSwitchEvent');
+  async setDownLightOnState(value: CharacteristicValue) {
+    debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Downlight On -> ' + value);
 
+    if (this.bulbCount === 2) {
+      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_DOWN, 0xc0])), this);
+    }
 
-  //   return this.fooOn;
-  // }
-  // async handleProgrammableSwitchOutputStateGet() {
-  //   hbLog.debug('Triggered GET ProgrammableSwitchOutputState');
-
-  //   return this.fooOn;
-  // }
-  // async handleProgrammableSwitchOutputStateSet(value) {
-  //   hbLog.debug('Triggered SET ProgrammableSwitchOutputState:' + value);
-  //   if (value == 0) {
-  //     hbLog.debug('both')
-  //   } else if (value == 1) {
-  //     hbLog.debug('down')
-  //   } else if (value == 2) {
-  //     hbLog.debug('up')
-  //   }
-  //   this.fooOn = value;
-  // }
-
-  async setLightOnState(value: CharacteristicValue) {
-    debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Light On -> ' + value);
-
-    if (this.lightStates.On && (value as boolean)) {
-      debugLog(this, 'light', 1, 'setLightOnState: redundant, ignore this');
+    if (this.downlightStates.On && (value as boolean)) {
+      debugLog(this, 'light', 1, 'setDownLightOnState: redundant, ignore this');
     } else {
-      this.lightStates.On = value as boolean;
-      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, (this.lightStates.On ? 0x01 : 0x00), 0xc0])), this);
+      this.downlightStates.On = value as boolean;
+      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, (this.downlightStates.On ? 0x01 : 0x00), 0xc0])), this);
     }
   }
 
-  async getLightOnState(): Promise<CharacteristicValue> {
-    const isOn = this.lightStates.On;
-    debugLog(this, ['light', 'characteristics'], [2, 4], 'Get Characteristic Light On -> ' + isOn);
+  async getDownLightOnState(): Promise<CharacteristicValue> {
+    const isOn = this.downlightStates.On;
+    debugLog(this, ['light', 'characteristics'], [2, 4], 'Get Characteristic Down Light On -> ' + isOn);
     // if you need to return an error to show the device as 'Not Responding' in the Home app:
     // throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
     return isOn;
   }
 
-  async setBrightness(value: CharacteristicValue) {
+  async setDownBrightness(value: CharacteristicValue) {
     let b: Buffer;
+
+    if (this.bulbCount === 2) {
+      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_DOWN, 0xc0])), this);
+    }
+
     if (value === 0) {
-      debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Brightness -> ' + value);
-      this.lightStates.homeShieldUp = true;
-      this.lightStates.Brightness = 0;
+      debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Down Brightness -> ' + value);
+      this.downlightStates.homeShieldUp = true;
+      this.downlightStates.Brightness = 0;
       const b1 = ONEBYTEHEADER.concat([0xa8, 0x04, 1, 0xc0]); // this one is for the device's memory
       const b2 = ONEBYTEHEADER.concat([0xa8, 0x04, 0, 0xc0]); // this one is actually turn off light
       b = Buffer.from(b1.concat(b2));
-    } else if (value === 100 && this.lightStates.homeShieldUp) {
-      this.lightStates.homeShieldUp = false;
-      this.lightStates.Brightness = 1;
+    } else if (value === 100 && this.downlightStates.homeShieldUp) {
+      this.downlightStates.homeShieldUp = false;
+      this.downlightStates.Brightness = 1;
       b = Buffer.from(ONEBYTEHEADER.concat([0xa8, 0x04, 1, 0xc0]));
     } else {
-      this.lightStates.homeShieldUp = false;
-      debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Brightness -> ' + value);
-      this.lightStates.Brightness = value as number;
-      b = Buffer.from(ONEBYTEHEADER.concat([0xa8, 0x04, this.lightStates.Brightness, 0xc0]));
+      this.downlightStates.homeShieldUp = false;
+      debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Down Brightness -> ' + value);
+      this.downlightStates.Brightness = value as number;
+      b = Buffer.from(ONEBYTEHEADER.concat([0xa8, 0x04, this.downlightStates.Brightness, 0xc0]));
     }
     clientWrite(this.client, b, this);
   }
 
-  async getBrightness(): Promise<CharacteristicValue> {
-    const brightness = (this.lightStates.Brightness === 0 ? 1 : this.lightStates.Brightness);
-    debugLog(this, ['light', 'characteristics'], [2, 4], 'Get Characteristic Brightness -> ' + brightness);
+  async getDownBrightness(): Promise<CharacteristicValue> {
+    const brightness = (this.downlightStates.Brightness === 0 ? 1 : this.downlightStates.Brightness);
+    debugLog(this, ['light', 'characteristics'], [2, 4], 'Get Characteristic Down Brightness -> ' + brightness);
+    return brightness;
+  }
+
+  async setUpLightOnState(value: CharacteristicValue) {
+    debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Up Light On -> ' + value);
+
+    if (this.bulbCount === 2) {
+      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_UP, 0xc0])), this);
+    }
+
+    if (this.uplightStates.On && (value as boolean)) {
+      debugLog(this, 'light', 1, 'setUpLightOnState: redundant, ignore this');
+    } else {
+      this.uplightStates.On = value as boolean;
+      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, (this.uplightStates.On ? 0x01 : 0x00), 0xc0])), this);
+    }
+  }
+
+  async getUpLightOnState(): Promise<CharacteristicValue> {
+    const isOn = this.uplightStates.On;
+    debugLog(this, ['light', 'characteristics'], [2, 4], 'Get Characteristic Up Light On -> ' + isOn);
+    return isOn;
+  }
+
+  async setUpBrightness(value: CharacteristicValue) {
+    let b: Buffer;
+
+    if (this.bulbCount === 2) {
+      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_UP, 0xc0])), this);
+    }
+
+    if (value === 0) {
+      debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Up Brightness -> ' + value);
+      this.uplightStates.homeShieldUp = true;
+      this.uplightStates.Brightness = 0;
+      const b1 = ONEBYTEHEADER.concat([0xa8, 0x04, 1, 0xc0]); // this one is for the device's memory
+      const b2 = ONEBYTEHEADER.concat([0xa8, 0x04, 0, 0xc0]); // this one is actually turn off light
+      b = Buffer.from(b1.concat(b2));
+    } else if (value === 100 && this.uplightStates.homeShieldUp) {
+      this.uplightStates.homeShieldUp = false;
+      this.uplightStates.Brightness = 1;
+      b = Buffer.from(ONEBYTEHEADER.concat([0xa8, 0x04, 1, 0xc0]));
+    } else {
+      this.uplightStates.homeShieldUp = false;
+      debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Up Brightness -> ' + value);
+      this.uplightStates.Brightness = value as number;
+      b = Buffer.from(ONEBYTEHEADER.concat([0xa8, 0x04, this.uplightStates.Brightness, 0xc0]));
+    }
+    clientWrite(this.client, b, this);
+  }
+
+  async getUpBrightness(): Promise<CharacteristicValue> {
+    const brightness = (this.uplightStates.Brightness === 0 ? 1 : this.uplightStates.Brightness);
+    debugLog(this, ['light', 'characteristics'], [2, 4], 'Get Characteristic Up Brightness -> ' + brightness);
     return brightness;
   }
 
@@ -530,22 +556,42 @@ export class BigAssFans_i6PlatformAccessory {
   }
 
   // Mireds!
-  async setColorTemperature(value: CharacteristicValue) {
+  async setDownColorTemperature(value: CharacteristicValue) {
+    if (this.bulbCount === 2) {
+      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_DOWN, 0xc0])), this);
+    }
     // should maybe limit color temp to one of 5 BAF supported values - 2200, 2700, 4000, 5000, 6500?
-    this.lightStates.ColorTemperature = Math.round(1000000/(value as number));
-    debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic ColorTemperature  -> ' + value +
-        ' (' + this.lightStates.ColorTemperature + ')');
-    const stuffedVarInt = stuff(varint_encode(this.lightStates.ColorTemperature));
+    this.downlightStates.ColorTemperature = Math.round(1000000/(value as number));
+    debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Down ColorTemperature  -> ' + value +
+        ' (' + this.downlightStates.ColorTemperature + ')');
+    const stuffedVarInt = stuff(varint_encode(this.downlightStates.ColorTemperature));
     const firstPart = [0xc0, 0x12, stuffedVarInt.length + 6, 0x12, stuffedVarInt.length + 4, 0x1a, stuffedVarInt.length + 2, 0xb8, 0x04];
     clientWrite(this.client, Buffer.from(firstPart.concat(stuffedVarInt, 0xc0)), this);
   }
 
-  async getColorTemperature(): Promise<CharacteristicValue> {
-    const colorTemperature = Math.round(1000000 / this.lightStates.ColorTemperature);
-    debugLog(this, ['light', 'characteristics'], [1, 4], 'Get Characteristic ColorTemperature -> ' + colorTemperature +
-        ' (' + this.lightStates.ColorTemperature + ')');
+  async getDownColorTemperature(): Promise<CharacteristicValue> {
+    const colorTemperature = Math.round(1000000 / this.downlightStates.ColorTemperature);
+    debugLog(this, ['light', 'characteristics'], [1, 4], 'Get Characteristic Down ColorTemperature -> ' + colorTemperature +
+        ' (' + this.downlightStates.ColorTemperature + ')');
     return colorTemperature;
   }
+
+  // async setUpColorTemperature(value: CharacteristicValue) {
+  //   // should maybe limit color temp to one of 5 BAF supported values - 2200, 2700, 4000, 5000, 6500?
+  //   this.uplightStates.ColorTemperature = Math.round(1000000/(value as number));
+  //   debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Up ColorTemperature  -> ' + value +
+  //       ' (' + this.uplightStates.ColorTemperature + ')');
+  //   const stuffedVarInt = stuff(varint_encode(this.uplightStates.ColorTemperature));
+  //   const firstPart = [0xc0, 0x12, stuffedVarInt.length + 6, 0x12, stuffedVarInt.length + 4, 0x1a, stuffedVarInt.length + 2, 0xb8, 0x04];
+  //   clientWrite(this.client, Buffer.from(firstPart.concat(stuffedVarInt, 0xc0)), this);
+  // }
+
+  // async getUpColorTemperature(): Promise<CharacteristicValue> {
+  //   const colorTemperature = Math.round(1000000 / this.uplightStates.ColorTemperature);
+  //   debugLog(this, ['light', 'characteristics'], [1, 4], 'Get Characteristic Up ColorTemperature -> ' + colorTemperature +
+  //       ' (' + this.uplightStates.ColorTemperature + ')');
+  //   return colorTemperature;
+  // }
 
   // set/get won't get called unless showWhooshSwitch is true
   async setWhooshSwitchOnState(value: CharacteristicValue) {
@@ -600,28 +646,8 @@ export class BigAssFans_i6PlatformAccessory {
     if (this.lightAutoSwitchOn) {
       clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, 0x02, 0xc0])), this);
     } else {
-      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, (this.lightStates.On ? 0x01 : 0x00), 0xc0])), this);
+      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, (this.downlightStates.On ? 0x01 : 0x00), 0xc0])), this);
     }
-    // if (this.lightAutoSwitchOn === false && this.lightStates.On === false) {
-    //   debugLog(this, 'newcode', 1, 'call setLightOnState(0) from setLightAutoSwitchOnState');
-    //   this.setLightOnState(0);  // lights already off, this should turn off Auto as far as BAF/device are concerned
-    // }
-    // if (this.lightAutoSwitchOn === true && this.lightStates.On === false) {
-    //   debugLog(this, 'newcode', 1, 'write ..., 0xa0, 0x04, 0x02, 0xc0 to fan');
-    //   clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, 0x02, 0xc0])), this);
-    // }
-
-
-    // if (this.lightAutoSwitchOn === true && this.lightStates.On === true) {
-    //   debugLog(this, 'newcode', 1, 'write ..., 0xa0, 0x04, 0x02, 0xc0 to fan');
-    //   clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, 0x02, 0xc0])), this);
-    // }
-
-    // if (this.lightAutoSwitchOn === false && this.lightStates.On === true) {
-    //   debugLog(this, 'newcode', 1, 'write ..., 0xa0, 0x04, 0x01, 0xc0 to fan');
-    //   clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, 0x01, 0xc0])), this);
-    // }
-
   }
 
   async getLightAutoSwitchOnState(): Promise<CharacteristicValue> {
@@ -649,7 +675,7 @@ export class BigAssFans_i6PlatformAccessory {
 */
 import net = require('net');
 
-function networkSetup(pA: BigAssFans_i6PlatformAccessory) {
+function networkSetup(pA: BAF) {
 
   if (pA.ProbeFrequency !== 0) {
     // attempt to prevent the occassional socket reset.
@@ -719,28 +745,15 @@ function networkSetup(pA: BigAssFans_i6PlatformAccessory) {
     }, retryMillisconds);
   });
 
-  /**
-  *  separate the data into chunks as required and feed them to parseFanMessage() one at a time.
-  */
   pA.client.on('data', (data: Buffer) => {
-    const oldFlag = pA.OldProtocolFlag;
-
-    if (pA.OldProtocolFlag === undefined ||
-        (pA.OldProtocolFlag === false && pA.Model === MODEL_i6)) { // try, try, if you don't succeed
-      pA.OldProtocolFlag = ((data.length >= 73) && (data[data.length - 73] === 0x28));
-      const msgString = 'assuming ' + (pA.OldProtocolFlag ? 'old' : 'new') + ' protocol';
-      debugLog(pA, 'network', 1, msgString);
-
-      if (oldFlag === false && pA.OldProtocolFlag === true) {
-        debugLog(pA, 'redflags', 1, 'succeeded: OldProtocolFlag flipped to true');
-      }
-    }
     onData(pA, data);
   });
-
 }
 
-function onData(pA: BigAssFans_i6PlatformAccessory, data: Buffer) {
+/**
+*  separate the data into chunks as required and feed them, unstuffed, to preChunk (if needed) and doChunk() one at a time.
+*/
+function onData(pA: BAF, data: Buffer) {
   debugLog(pA, 'network', 13, 'raw (stuffed) data: ' + hexFormat(data));
   debugLog(pA, 'network', 8, 'accessory client got: ' + data.length + (data.length === 1 ? ' byte' : ' bytes'));
 
@@ -772,6 +785,7 @@ function onData(pA: BigAssFans_i6PlatformAccessory, data: Buffer) {
     }
 
     debugLog(pA, 'network', 11, 'raw (unstuffed) chunks[' + i + ']: ' + hexFormat(unstuff(chunks[i])));
+    preChunk(unstuff(chunks[i]), pA); // right now this is only for finding out which light is targeted in the case of two lights
     doChunk(unstuff(chunks[i]), pA);
   }
 }
@@ -789,22 +803,61 @@ function sortFunction(a, b) {
 * property handler functions
 */
 
-function bulbPresent(value: boolean, pA:BigAssFans_i6PlatformAccessory) {
-  if (value) {
-    debugLog(pA, 'light', 1, 'light detected');
-    infoLogOnce(pA, 'light detected');
+function bulbsPresent(pA:BAF, downlightPresent:boolean, uplightPresent:boolean) {
+  pA.bulbCount = 0;
+
+
+  if (downlightPresent) {
+    pA.bulbCount++;
+    debugLog(pA, 'light', 1, 'downlight detected');
+    infoLogOnce(pA, 'downlight detected');
   } else {
-    infoLogOnce(pA, 'no light detected');
-    debugLog(pA, 'light', 1, 'no light detected');
-    const service = pA.accessory.getService(pA.platform.Service.Lightbulb);
+    infoLogOnce(pA, 'no downlight detected');
+    debugLog(pA, 'light', 1, 'no downlight detected');
+    const service = pA.accessory.getService('downlight');
     if (service) {
-      debugLog(pA, 'light', 1, 'remove service: Lightbulb');
+      debugLog(pA, 'light', 1, 'remove service: \'downlight\'');
+      pA.accessory.removeService(service);
+    }
+  }
+
+  if (uplightPresent) {
+    pA.bulbCount++;
+    debugLog(pA, 'light', 1, 'uplight detected');
+    infoLogOnce(pA, 'uplight detected');
+
+    // Uplight Bulb was not pre-instantiated so we do it here if we haven't already done it.
+    if (!pA.accessory.getService('uplight')) {
+      debugLog(pA, 'light', 1, 'add service: \'uplight\'');
+      pA.uplightBulbService = pA.accessory.addService(pA.platform.Service.Lightbulb, 'uplight', 'light-2');
+      const capitalizeName = pA.Name[0] === pA.Name[0].toUpperCase();
+      debugLog(pA, 'light', 1, `uplight name is ${pA.Name + (capitalizeName ? ' Upight' : ' uplight')}`);
+      pA.uplightBulbService.setCharacteristic(pA.platform.Characteristic.Name, pA.Name + (capitalizeName ? ' Upight' : ' uplight'));
+
+      pA.uplightBulbService.getCharacteristic(pA.platform.Characteristic.On)
+        .onSet(pA.setUpLightOnState.bind(pA))
+        .onGet(pA.getUpLightOnState.bind(pA));
+
+      pA.uplightBulbService.getCharacteristic(pA.platform.Characteristic.Brightness)
+        .onSet(pA.setUpBrightness.bind(pA))
+        .onGet(pA.getUpBrightness.bind(pA));
+
+      // pA.uplightBulbService.getCharacteristic(pA.platform.Characteristic.ColorTemperature)
+      // .onSet(pA.setUpColorTemperature.bind(pA))
+      // .onGet(pA.getUpColorTemperature.bind(pA));
+    }
+  } else {
+    infoLogOnce(pA, 'no uplight detected');
+    debugLog(pA, 'light', 1, 'no uplight detected');
+    const service = pA.accessory.getService('uplight');
+    if (service) {
+      debugLog(pA, 'light', 1, 'remove service: \'uplight\'');
       pA.accessory.removeService(service);
     }
   }
 }
 
-function productType(value: string, pA:BigAssFans_i6PlatformAccessory) {
+function productType(value:string, pA:BAF) {
   const regex = /[ -~]/g;  // count the printable characters
   const found = value.match(regex);
   if (found === null || (found.length !== value.length)) {
@@ -830,7 +883,7 @@ function productType(value: string, pA:BigAssFans_i6PlatformAccessory) {
       //   .removeAllListeners('set')
       //   .removeAllListeners('get');
       debugLog(pA, 'newcode', 1, 'no ColorTemperature Characteristic for product type "' + pA.Model + '"');
-      pA.lightBulbService.removeCharacteristic(pA.lightBulbService.getCharacteristic(pA.platform.Characteristic.ColorTemperature));
+      pA.downlightBulbService.removeCharacteristic(pA.downlightBulbService.getCharacteristic(pA.platform.Characteristic.ColorTemperature));
     }
 
     if (pA.Model === MODEL_HAIKU_HI || pA.Model === MODEL_HAIKU_L) {
@@ -853,7 +906,7 @@ function productType(value: string, pA:BigAssFans_i6PlatformAccessory) {
   }
 }
 
-function firmwareVersion(value: string, pA: BigAssFans_i6PlatformAccessory) {
+function firmwareVersion(value:string, pA: BAF) {
   if (pA.firmwareUnknown) {  // need to do this only once
     pA.firmwareUnknown = false;
 
@@ -868,75 +921,124 @@ function firmwareVersion(value: string, pA: BigAssFans_i6PlatformAccessory) {
   }
 }
 
-function lightColorTemperature(value: number, pA:BigAssFans_i6PlatformAccessory) {
-  if (!pA.accessory.getService(pA.platform.Service.Lightbulb)) {
-    debugLog(pA, 'newcode', 1, 'lightColorTemperature: no lightbulb Service');
+function setTargetBulb(value:number, pA:BAF) {
+  debugLog(pA, ['newcode', 'light'], [1, 1], 'setTargetBulb: ' + value);
+  pA.targetBulb = value;
+}
+
+function lightColorTemperature(value:number, pA:BAF) {
+  switch (pA.targetBulb) {
+    case TARGETLIGHT_UP:
+      debugLog(pA, 'newcode', 1, 'plugin does no support uplight color temperature');
+      // targetedColorTemperature(value, pA.uplightBulbService, pA.uplightStates, 'Up', pA);
+      break;
+    case TARGETLIGHT_DOWN:
+      targetedColorTemperature(value, pA.downlightBulbService, pA.downlightStates, 'Down', pA);
+      break;
+    case TARGETLIGHT_BOTH:
+      debugLog(pA, 'newcode', 1, 'plugin does no support uplight color temperature');
+      // targetedColorTemperature(value, pA.uplightBulbService, pA.uplightStates, 'Up', pA);
+      targetedColorTemperature(value, pA.downlightBulbService, pA.downlightStates, 'Down', pA);
+      break;
+  }
+}
+function targetedColorTemperature(value:number, service:Service, states:lightStates, description:string, pA:BAF) {
+  if (service === undefined) {
+    debugLog(pA, 'newcode', 1, `lightColorTemperature: no ${description} lightbulb Service`);
     return;
   }
   if (pA.Model !== MODEL_HAIKU_HI && pA.Model !== MODEL_HAIKU_L) {
-    pA.lightStates.ColorTemperature = value;
-    const mireds = Math.round(1000000 / pA.lightStates.ColorTemperature);
-    debugLog(pA, ['light', 'characteristics'], [1, 3], 'update ColorTemperature: ' + mireds + ' (' + pA.lightStates.ColorTemperature + ')');
-    pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.ColorTemperature, mireds);
+    states.ColorTemperature = value;
+    const mireds = Math.round(1000000 / states.ColorTemperature);
+    debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} ColorTemperature: ${mireds} (${states.ColorTemperature})`);
+    service.updateCharacteristic(pA.platform.Characteristic.ColorTemperature, mireds);
   } else {
     // debugLog(pA, 'newcode', 1, 'ColorTemperature: ignored');
   }
 }
 
-function lightBrightness(value: number, pA:BigAssFans_i6PlatformAccessory) {
-  if (!pA.accessory.getService(pA.platform.Service.Lightbulb)) {
-    debugLog(pA, 'newcode', 1, 'lightBrightness: no lightbulb Service');
+function lightBrightness(value: number, pA:BAF) {
+  switch (pA.targetBulb) {
+    case TARGETLIGHT_UP:
+      targetedlightBrightness(value, pA.uplightBulbService, pA.uplightStates, 'Up', pA);
+      break;
+    case TARGETLIGHT_DOWN:
+      targetedlightBrightness(value, pA.downlightBulbService, pA.downlightStates, 'Down', pA);
+      break;
+    case TARGETLIGHT_BOTH:
+      targetedlightBrightness(value, pA.uplightBulbService, pA.uplightStates, 'Up', pA);
+      targetedlightBrightness(value, pA.downlightBulbService, pA.downlightStates, 'Down', pA);
+      break;
+  }
+}
+function targetedlightBrightness(value:number, lightBulbService:Service, states:lightStates, description:string, pA:BAF) {
+  if (lightBulbService === undefined) {
+    debugLog(pA, 'newcode', 1, `lightBrightness: no ${description} lightbulb Service`);
     return;
   }
 
   if (value !== 0) {
-    pA.lightStates.homeShieldUp = false;
-    pA.lightStates.Brightness = (value as number);
-    debugLog(pA, ['light', 'characteristics'], [1, 3], 'update Brightness: ' + pA.lightStates.Brightness);
-    pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.Brightness, pA.lightStates.Brightness);
-    if (pA.lightStates.On === false) {
-      pA.lightStates.On = true;
-      debugLog(pA, ['light', 'characteristics'], [1, 3], 'update Light On From lightBrightness: ' + pA.lightStates.On);
-      pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
+    states.homeShieldUp = false;
+    states.Brightness = (value as number);
+    debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} Brightness: ` + states.Brightness);
+    lightBulbService.updateCharacteristic(pA.platform.Characteristic.Brightness, states.Brightness);
+    if (states.On === false) {
+      states.On = true;
+      debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} Light On From targetedlightBrightness: ` + states.On);
+      lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, states.On);
     }
   } else {
-    if (pA.lightStates.On === true) {
-      pA.lightStates.On = false;
-      debugLog(pA, ['light', 'characteristics'], [1, 3], 'update Light On From lightBrightness: ' + pA.lightStates.On);
-      pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
+    if (states.On === true) {
+      states.On = false;
+      debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} Light On From lightBrightness: ` + states.On);
+      lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, states.On);
     }
   }
 }
 
-function lightOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
-  debugLog(pA, 'light', 1, 'lightOnState value: ' + value);
+function lightOnState(value: number, pA:BAF) {
+  switch (pA.targetBulb) {
+    case TARGETLIGHT_UP:
+      targetedlightOnState(value, pA.uplightBulbService, pA.uplightStates, 'Up', pA);
+      break;
+    case TARGETLIGHT_DOWN:
+      targetedlightOnState(value, pA.downlightBulbService, pA.downlightStates, 'Down', pA);
+      break;
+    case TARGETLIGHT_BOTH:
+      targetedlightOnState(value, pA.uplightBulbService, pA.uplightStates, 'Up', pA);
+      targetedlightOnState(value, pA.downlightBulbService, pA.downlightStates, 'Down', pA);
+      break;
+  }
+}
+function targetedlightOnState(value:number, service:Service, states:lightStates, description:string, pA:BAF) {
+  debugLog(pA, 'light', 1, `${description} lightOnState value: ` + value);
 
-  if (!pA.accessory.getService(pA.platform.Service.Lightbulb)) {
-    debugLog(pA, 'newcode', 1, 'lightOnState: no lightbulb Service');
+  if (service === undefined) {
+    debugLog(pA, 'newcode', 1, `lightOnState: no ${description} lightbulb Service`);
     return;
   }
 
   if (value === 0 || value === 1) {
     const onValue = (value === 0 ? false : true);
-    if (onValue !== pA.lightStates.On) {
-      pA.lightStates.On = onValue;
-      debugLog(pA, ['light', 'characteristics'], [1, 3], 'update Light On: ' + pA.lightStates.On);
-      pA.lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightStates.On);
+    if (onValue !== states.On) {
+      states.On = onValue;
+      debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} Light On: ` + states.On);
+      service.updateCharacteristic(pA.platform.Characteristic.On, states.On);
     }
 
     if (pA.lightAutoSwitchOn) {
       pA.lightAutoSwitchOn = false;
-      debugLog(pA, ['light', 'characteristics'], [1, 3], 'update light auto switch off: ' + pA.lightAutoSwitchOn);
+      debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} light auto switch off: ` + pA.lightAutoSwitchOn);
       pA.lightAutoSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightAutoSwitchOn);
     }
   } else if (pA.showLightAutoSwitch && value === 2 && pA.lightAutoSwitchOn === false) {
     pA.lightAutoSwitchOn = true;
-    debugLog(pA, ['light', 'characteristics'], [1, 3], 'update light auto switch on: ' + pA.lightAutoSwitchOn);
+    debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} light auto switch on: ` + pA.lightAutoSwitchOn);
     pA.lightAutoSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightAutoSwitchOn);
   }
 }
 
-function fanOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
+function fanOnState(value: number, pA:BAF) {
   if (pA.showFanAutoSwitch) {
     pA.fanAutoSwitchOn = (value === 2) ? true: false;
     debugLog(pA, 'characteristics', 3, 'update fan auto: ' + pA.fanAutoSwitchOn);
@@ -951,7 +1053,7 @@ function fanOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
   }
 }
 
-function fanRotationDirection(value: number, pA:BigAssFans_i6PlatformAccessory) {
+function fanRotationDirection(value: number, pA:BAF) {
   //  fan reports if 'reverse rotation' is on or off, homebridge wants rotation direction
   //  reverse switch off (0) == rotation direction counterclockwise (1)
   const rotationDirection = value === 0 ? 1 : 0;
@@ -960,7 +1062,7 @@ function fanRotationDirection(value: number, pA:BigAssFans_i6PlatformAccessory) 
   pA.fanService.updateCharacteristic(pA.platform.Characteristic.RotationDirection, pA.fanStates.RotationDirection);
 }
 
-function fanRotationSpeed(value: number, pA:BigAssFans_i6PlatformAccessory) {
+function fanRotationSpeed(value: number, pA:BAF) {
   if (value !== 0) { // don't tell homebridge speed is zero, it only confuses it.  It'll find out it's off in due course.
     pA.fanStates.homeShieldUp = false;
     pA.fanStates.RotationSpeed = (value as number);
@@ -984,7 +1086,7 @@ function fanRotationSpeed(value: number, pA:BigAssFans_i6PlatformAccessory) {
   }
 }
 
-function currentTemperature(value: number, pA:BigAssFans_i6PlatformAccessory) {
+function currentTemperature(value: number, pA:BAF) {
   if (!pA.accessory.getService(pA.platform.Service.TemperatureSensor)) {
     debugLog(pA, 'newcode', 1, 'currentTemperature: no TemperatureSensor Service');
     return;
@@ -1009,7 +1111,7 @@ function currentTemperature(value: number, pA:BigAssFans_i6PlatformAccessory) {
   pA.temperatureSensorService.updateCharacteristic(pA.platform.Characteristic.CurrentTemperature, pA.CurrentTemperature);
 }
 
-function currentRelativeHumidity(value: number, pA:BigAssFans_i6PlatformAccessory) {
+function currentRelativeHumidity(value: number, pA:BAF) {
   debugLog(pA, 'humidity', 2, pA.Name + ' - CurrentRelativeHumidity:' + value);
 
   if (!pA.accessory.getService(pA.platform.Service.HumiditySensor)) {
@@ -1035,7 +1137,7 @@ function currentRelativeHumidity(value: number, pA:BigAssFans_i6PlatformAccessor
   pA.humiditySensorService.updateCharacteristic(pA.platform.Characteristic.CurrentRelativeHumidity, pA.CurrentRelativeHumidity);
 }
 
-function whooshOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
+function whooshOnState(value: number, pA:BAF) {
   if (pA.showWhooshSwitch) {
     const onValue = (value === 0 ? false : true);
     pA.whooshSwitchOn = onValue;
@@ -1044,7 +1146,7 @@ function whooshOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
   }
 }
 
-function dimToWarmOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
+function dimToWarmOnState(value: number, pA:BAF) {
   if (pA.showDimToWarmSwitch) {
     const onValue = (value === 0 ? false : true);
     pA.dimToWarmSwitchOn = onValue;
@@ -1053,7 +1155,7 @@ function dimToWarmOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
   }
 }
 
-function ecoModeOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
+function ecoModeOnState(value: number, pA:BAF) {
   if (pA.showEcoModeSwitch) {
     const onValue = (value === 0 ? false : true);
     pA.ecoModeSwitchOn = onValue;
@@ -1062,30 +1164,9 @@ function ecoModeOnState(value: number, pA:BigAssFans_i6PlatformAccessory) {
   }
 }
 
-// function lightSelector(value: number, pA: BigAssFans_i6PlatformAccessory) {
-//   switch (value) {
-//     case 0:
-//       pA.fooOn == 0;
-//       pA.lightSelectorService.setCharacteristic(pA.platform.Characteristic.SecuritySystemCurrentState, 0);
-//       break;
-//     case 1:
-//       pA.fooOn == 1;
-//       pA.lightSelectorService.setCharacteristic(pA.platform.Characteristic.SecuritySystemCurrentState, 1);
-//       break;
-//     case 2:
-//       pA.fooOn == 2;
-//       pA.lightSelectorService.setCharacteristic(pA.platform.Characteristic.SecuritySystemCurrentState, 2);
-//      break
-//     default:
-//       debugLog(pA, 'redflags', 0, 'unknown light selector value' + value);
-//       pA.lightSelectorService.setCharacteristic(pA.platform.Characteristic.SecuritySystemCurrentState, 3);
-//       break;
-//   }
-// }
-
 // keeping track to gather clues in unending effort to ID unknown codes
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-function mysteryCode(value: string, pA:BigAssFans_i6PlatformAccessory, code: string) {
+function mysteryCode(value: string, pA:BAF, code: string) {
   const v = value;
   const p = pA.mysteryProperties[code];
 
@@ -1102,7 +1183,7 @@ function mysteryCode(value: string, pA:BigAssFans_i6PlatformAccessory, code: str
 
 // a little hack for codes under investigation
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-function codeWatch(s: string, v: string|number|Buffer, m: Buffer, pA:BigAssFans_i6PlatformAccessory) {
+function codeWatch(s: string, v: string|number|Buffer, m: Buffer, pA:BAF) {
   if (s === '0xe8, 0x01') {
     debugLog(pA, 'cluing', 5, 'code watch - s: ' + s + ', m: ' + hexFormat(m));
   } if (s === '0xd8, 0x01') {
@@ -1178,7 +1259,7 @@ function hexFormat(arg) {
 
 let lastDebugMessage = 'lastDebugMessage initializer';
 let lastDebugMessageTag = 'lastDebugMessageTag initializer';
-function debugLog(pA:BigAssFans_i6PlatformAccessory, logTag:string|string[], logLevel:number|number[], logMessage:string) {
+function debugLog(pA:BAF, logTag:string|string[], logLevel:number|number[], logMessage:string) {
   if (typeof(logTag) === 'string') {
     if (pA.debugLevels[logTag] === undefined) {
       hbLog.warn('no such logging tag: "' + logTag + '", the message from ' + pA.Name + ' is: "' + logMessage + '"');
@@ -1208,7 +1289,7 @@ function debugLog(pA:BigAssFans_i6PlatformAccessory, logTag:string|string[], log
 
 const messagesLogged:string[] = [];
 
-function debugLogOnce(pA:BigAssFans_i6PlatformAccessory, logTag:string|string[], logLevel:number|number[], logMessage:string) {
+function debugLogOnce(pA:BAF, logTag:string|string[], logLevel:number|number[], logMessage:string) {
   if (messagesLogged.includes(logMessage)) {
     debugLog(pA, 'newcode', 2, 'redundant message: "' + logMessage + '"');
     return;
@@ -1218,7 +1299,7 @@ function debugLogOnce(pA:BigAssFans_i6PlatformAccessory, logTag:string|string[],
   }
 }
 
-function infoLogOnce(pA:BigAssFans_i6PlatformAccessory, logMessage: string) {
+function infoLogOnce(pA:BAF, logMessage: string) {
   if (messagesLogged.includes(logMessage)) {
     debugLog(pA, 'newcode', 2, 'redundant message: "' + logMessage + '"');
     return;
@@ -1228,7 +1309,7 @@ function infoLogOnce(pA:BigAssFans_i6PlatformAccessory, logMessage: string) {
   }
 }
 
-function clientWrite(client, b, pA:BigAssFans_i6PlatformAccessory) {
+function clientWrite(client, b, pA:BAF) {
   debugLog(pA, 'network', 7, 'sending ' + b.toString('hex'));
   try  {
     client.write(b);
@@ -1279,8 +1360,336 @@ function getProtoElements2(b: Buffer): [Buffer, number, number] {
   return [b.subarray(a.length), key & 0x07,  key >>> 3];
 }
 
-function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
+async function preChunk(b:Buffer, pA: BAF) {
+  let type: number;
+  let field: number;
+  let length: number;
+  let s:string, v: number;
 
+  [b, type, field] = getProtoElements2(b);
+  debugLog(pA, 'protoparse', 2, `field: ${field}, type ${type}`);
+  if (field === 2) { // top level
+    [b, length] = getVarint2(b);
+    [b, type, field] = getProtoElements2(b);
+    debugLog(pA, 'protoparse', 2, `  field: ${field}, type ${type}`);
+    while (b.length > 0) {
+      if (field === 4) {  // level 2
+        [b, length] = getVarint2(b);
+
+        const remainingLength = (b.length) - length;
+        while (b.length > remainingLength) {
+          [b, type, field] = getProtoElements2(b);
+          debugLog(pA, 'protoparse', 2, `    field: ${field}, type ${type}`);
+          if (field === 2) {
+            [b, length] = getVarint2(b);
+            [b, type, field] = getProtoElements2(b);
+            debugLog(pA, 'protoparse', 2, `      field: ${field}, type ${type}`);
+            switch (field) {
+              case 82: // lightSelector?
+                [b, v] = getValue(b);
+                debugLog(pA, 'newcode', 1, 'target light: ' + v);
+                setTargetBulb(v, pA);
+                break;
+
+              // ignore strings
+              case 1: // name
+              case 2: // product type
+              case 4: // local datetime
+              case 5: // zulu datetime
+              case 6:
+              case 7: // firmware version (sometimes zero-length?!)
+              case 8: // MAC address
+              case 9:
+              case 10:  // fan's UUID
+              case 11:  // website - api.bigassfans.com
+              case 13:  // api version (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+              case 37:
+              case 56:
+              case 59:
+              case 76:
+              case 83:
+              case 120: // IP address
+              case 156: // stats (uptime)  (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto) but aiobafi6 says int32
+                [b, s] = getString(b);  // ignore
+                break;
+
+              // ignore numbers
+              case 3:
+              case 14:
+              case 15:
+              case 24:
+              case 25:
+              case 26:
+              case 27:
+              case 28:
+              case 29:
+              case 30:
+              case 31:
+              case 32:
+              case 33:
+              case 43:  // fan on/off/auto
+              case 44:  // rotation direction
+              case 45:  // fan speed as %
+              case 46:  // fan rotation speed
+              case 47:  // fan auto comfort
+              case 48:  // comfort ideal temperature
+              case 49:
+              case 50:  // comfort min speed
+              case 51:  // comfort max speed
+              case 52:  // fan auto -> motion -> motion sense switch
+              case 53:  // fan auto -> motion -> motion timeout (time)
+              case 54:  // fan return to auto (return to auto switch)
+              case 55:  // fan return to auto (return after)
+              case 57:
+              case 58:  // whoosh
+              case 60:  // comfort heat assist
+              case 61:  // comfort_heat_assist_speed (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+              case 62:  // comfort_heat_assist_reverse_enable (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+              case 63:  // [target per aiobafi6] revolutions per minute
+              case 64:  // current_rpm (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+              case 65:  // eco mode (haiku)
+              case 66:  // occupancy detection (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+              case 68:  // light on/off/auto
+              case 69:  // light brightness
+              case 70:  // brightness as level (0,1-16)
+              case 71:  // color temperature
+              case 72:
+              case 73:  // light auto motion timeout (time)
+              case 74:  // light return to auto (return to auto switch)
+              case 75:  // light return to auto (return after)
+              case 77:  // light dim to warm
+              case 78:  // warmest color temperature
+              case 79:  // coolest color temperature
+              case 85:  // light_occupancy_detected (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+              case 86:  // temperature
+              case 87:  // humidity
+              case 89:
+              case 118:
+              case 121:
+              case 133:
+              case 134: // LED indicators
+              case 135: // fan beep
+              case 136: // legacy_ir_remote_enable (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto) [haiku only?]
+              case 137:
+              case 138:
+              case 140:
+              case 150: // prevent additional controls
+              case 151:
+              case 153:
+              case 172:
+              case 173:
+              case 174:
+              case 175:
+                [b, v] = getValue(b); // ignore
+                debugLog(pA, 'protoparse', 2, '      value: ' + v);
+                break;
+
+              case 124: { // WiFi messages
+                [b, length] = getVarint2(b);
+                const remainingLength = (b.length) - length;
+                while (b.length > remainingLength) {
+                  [b, type, field] = getProtoElements2(b);
+                  debugLog(pA, 'protoparse', 2, `        field: ${field}, type ${type}`);
+                  switch (field) {
+                    case 1: // SSID
+                      [b, s] = getString(b); // ignore
+                      debugLog(pA, 'protoparse', 2, '          string: ' + s);
+                      break;
+
+                    default:
+                      b = doUnknownFieldQuietly(b, type, pA);
+                      break;
+                  }
+                }
+                break;
+              }
+
+              case 16:  // firmware (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+              case 152: { // remote_firmware (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+                [b, length] = getVarint2(b);
+                const remainingLength = (b.length) - length;
+                while (b.length > remainingLength) {
+                  [b, type, field] = getProtoElements2(b);
+                  debugLog(pA, 'protoparse', 2, `        field: ${field}, type ${type}`);
+
+                  switch (field) {
+                    case 1:
+                    case 5:
+                    case 6:
+                      [b, v] = getValue(b); // ignore
+                      debugLog(pA, 'protoparse', 2, '          value: ' + v);
+                      break;
+
+                    case 2:
+                    case 3:
+                    case 4:
+                      [b, s] = getString(b); // ignore
+                      debugLog(pA, 'protoparse', 2, '          string: ' + s);
+                      break;
+
+                    default:
+                      b = doUnknownFieldQuietly(b, type, pA);
+                      break;
+                  }
+                }
+                break;
+              }
+
+              case 17: { // capabilities (include light pressence)
+                [b, length] = getVarint2(b);
+                const remainingLength = (b.length) - length;
+                while (b.length > remainingLength) {
+                  [b, type, field] = getProtoElements2(b);
+                  debugLog(pA, 'protoparse', 2, `        field: ${field}, type ${type}`);
+                  switch (field) {
+                    case 1:
+                    case 2: // bulb equipped for 3rd Gen Haiku H/I Series?
+                    case 3:
+                    case 4:
+                    case 6: // uplight for es6 detected?
+                    case 7:
+                    case 9:
+                    case 10:
+                    case 11:
+                    case 13:
+                    case 14:
+                      [b, v] = getValue(b);  // ignore
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
+                      break;
+
+                    default:
+                      b = doUnknownFieldQuietly(b, type, pA);
+                      break;
+                  }
+                }
+                break;
+              }
+
+              case 171: { // something to do with a "group" including group name
+                [b, length] = getVarint2(b);
+                const remainingLength = (b.length) - length;
+                while (b.length > remainingLength) {
+                  [b, type, field] = getProtoElements2(b);
+                  debugLog(pA, 'protoparse', 2, `        field: ${field}, type ${type}`);
+                  switch (field) {
+                    case 2:
+                      [b, s] = getString(b);  // ignore
+                      debugLog(pA, 'protoparse', 2, '          string: ' + s);
+                      break;
+                    case 3:
+                      [b, s] = getString(b);  // ignore
+                      debugLog(pA, 'protoparse', 2, '          string: ' + s);
+                      break;
+
+                    default:
+                      b = doUnknownFieldQuietly(b, type, pA);
+                      break;
+                  }
+                }
+                break;
+              }
+
+              default:
+                b = doUnknownFieldQuietly(b, type, pA);
+                break;
+            }
+          } else if (field === 3) {  // schedule
+            [b, length] = getVarint2(b);
+            const residualLength = (b.length) - length;
+            while (b.length > residualLength) {
+              [b, type, field] = getProtoElements2(b);
+              debugLog(pA, 'protoparse', 2, `      field: ${field}, type ${type}`);
+              switch (field) {
+                case 1:
+                case 3:
+                case 4:
+                  [b, v] = getValue(b); // ignore
+                  break;
+                case 2: {
+                  [b, length] = getVarint2(b);
+                  const residualLength = (b.length) - length;
+                  while (b.length > residualLength) {
+                    [b, type, field] = getProtoElements2(b);
+                    debugLog(pA, 'protoparse', 2, `        field: ${field}, type ${type}`);
+                    switch (field) {
+                      case 2:
+                      case 4:
+                        [b, s] = getString(b);  // ignore
+                        break;
+                      case 5:
+                        [b, v] = getValue(b); // ignore
+                        break;
+                      case 7: {
+                        [b, length] = getVarint2(b);
+                        const residualLength = (b.length) - length;
+                        while (b.length > residualLength) {
+                          [b, type, field] = getProtoElements2(b);
+                          debugLog(pA, 'protoparse', 2, `          field: ${field}, type ${type}`);
+                          switch (field) {
+                            case 1:
+                              [b, s] = getString(b);  // ignore
+                              break;
+                            case 2: {
+                              [b, length] = getVarint2(b);
+                              const residualLength = (b.length) - length;
+                              while (b.length > residualLength) {
+                                [b, type, field] = getProtoElements2(b);
+                                switch (field) {
+                                  case 1:
+                                    [b, v] = getValue(b); // ignore
+                                    break;
+
+                                  default:
+                                    debugLog(pA, 'cluing', 2, 'unknown schedule field ' + field);
+                                }
+                              }
+                              break;
+                            }
+
+                            default:
+                              debugLog(pA, 'cluing', 2, 'unknown schedule field ' + field);
+                              break;
+                          }
+                        }
+                        break;
+                      }
+
+                      default:
+                        debugLog(pA, 'cluing', 2, 'unknown schedule field ' + field);
+                        break;
+                    }
+                  }
+                  break;
+                }
+
+                default:
+                  debugLog(pA, 'cluing', 2, 'unknown schedule field ' + field);
+                  break;
+              }
+            }
+          } else {
+            debugLog(pA, 'cluing', 2, 'preChunk() unexpected field 2 sub level 4 field: ' + field);
+            await sleep(1000);
+          }
+        }
+      } else if (field === 5) { // seconds since unix epoch
+        [b, v] = getValue(b); // ignore
+      } else if (field === 6) { // 32-byte hash
+        [b, s] = getString(b);  // ignore
+      } else {
+        debugLog(pA, 'cluing', 1, 'preChunk() surprise field: ' + field);
+      }
+
+      if (b.length > 0) {
+        [b, type, field] = getProtoElements2(b);
+      }
+    }
+  } else {
+    debugLog(pA, 'redflags', 1, 'preChunk() top level message, expected field "2", got field "' + field + '"');
+  }
+}
+
+async function doChunk(b:Buffer, pA: BAF) {
   let type: number;
   let field: number;
   let length: number;
@@ -1299,9 +1708,11 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
         const remainingLength = (b.length) - length;
         while (b.length > remainingLength) {
           [b, type, field] = getProtoElements2(b);
+          debugLog(pA, 'protoparse', 1, 'field: ' + field);
           if (field === 2) {
             [b, length] = getVarint2(b);
             [b, type, field] = getProtoElements2(b);
+            debugLog(pA, 'protoparse', 1, '  field: ' + field);
             switch (field) {
               case 2: // product type
                 [b, s] = getString(b);
@@ -1315,7 +1726,7 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
                 [b, v] = getValue(b);
                 fanOnState(v, pA);
                 break;
-              case 44:  //  rotation direction
+              case 44:  // rotation direction
                 [b, v] = getValue(b);
                 fanRotationDirection(v, pA);
                 break;
@@ -1393,7 +1804,7 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
               case 70:  // brightness as level (0,1-16)
               case 73:  // light auto motion timeout (time)
               case 74:  // light return to auto (return to auto switch)
-              case 75:  // light return to auto (return after
+              case 75:  // light return to auto (return after)
               case 78:  // warmest color temperature
               case 79:  // coolest color temperature
               case 134: // LED indicators
@@ -1401,6 +1812,7 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
               case 136: // legacy_ir_remote_enable (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto) [haiku only?]
               case 150: // prevent additional controls
                 [b, v] = getValue(b); // ignore
+                debugLog(pA, 'protoparse', 1, 'value: ' + v);
                 break;
 
               // mystery strings
@@ -1412,9 +1824,9 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
               case 59:
               case 76:
               case 83:
-              case 156: // stats (uptime)  (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto) but aiobafi6 says int32
                 [b, s] = getString(b);
                 debugLog(pA, 'cluing', 6, 'field ' + field + ', mystery string: ' + s);
+                debugLog(pA, 'protoparse', 1, 'string: ' + s);
                 break;
 
               // mystery numbers
@@ -1454,6 +1866,7 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
               case 175:
                 [b, v] = getValue(b);
                 debugLog(pA, 'cluing', 6, 'field ' + field + ', mystery number: ' + v);
+                debugLog(pA, 'protoparse', 1, 'value: ' + v);
                 break;
 
               case 124: { // WiFi messages
@@ -1464,11 +1877,12 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
                   switch (field) {
                     case 1: // SSID
                       [b, s] = getString(b); // ignore
+                      debugLog(pA, 'protoparse', 1, 'string: ' + s);
                       break;
 
                     default:
                       debugLog(pA, 'cluing', 1, 'fell into default, WiFi messages field: "' + field + '"');
-                      b = b.subarray(b.length - remainingLength);
+                      b = doUnknownField(b, type, pA);
                       break;
                   }
                 }
@@ -1484,16 +1898,18 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
                   switch (field) {
                     case 1:
                       [b, v] = getValue(b); // ignore
+                      debugLog(pA, 'protoparse', 1, 'value: ' + v);
                       break;
                     case 2:
                     case 3:
                     case 4:
                       [b, s] = getString(b); // ignore
+                      debugLog(pA, 'protoparse', 1, 'string: ' + s);
                       break;
 
                     default:
                       debugLog(pA, 'cluing', 1, 'fell into default, field 16 or 152 message with subfield: "' + field + '"');
-                      b = b.subarray(b.length - remainingLength);
+                      b = doUnknownField(b, type, pA);
                       break;
                   }
                 }
@@ -1501,43 +1917,85 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
               }
 
               case 17: { // capabilities (include light pressence)
-                let hasBulb = false;
+                let hasDownlight = false;
+                let hasUplight = false;
                 [b, length] = getVarint2(b);
                 const remainingLength = (b.length) - length;
                 while (b.length > remainingLength) {
                   [b, type, field] = getProtoElements2(b);
                   switch (field) {
-                    case 1:
-                    case 3:
+                    case 1: // has comfort (https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto 7/26/2022)
+                    case 3: // has comfort (https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto 7/26/2022)
                     case 7:
+                    case 8:
                     case 9:
                     case 10:
+                    case 11:
+                    case 13:
                     case 14:
                       [b, v] = getValue(b);  // ignore
+                      debugLog(pA, 'protoparse', 1, 'value: ' + v);
+                      debugLog(pA, 'cluing', 6, `field 17, mystery field: ${field}, value: ${v}`);
                       break;
 
                     case 2: // bulb equipped for 3rd Gen Haiku H/I Series?
-                      debugLog(pA, 'cluing', 1, 'bulb equipped for 3rd Gen Haiku H/I Series?');
+                      debugLog(pA, 'cluing', 1, 'downlight equipped for 3rd Gen Haiku H/I Series?');
                       // falls through
                     case 4:
                       [b, v] = getValue(b);  // bulb equipped?
+                      debugLog(pA, 'protoparse', 1, 'value: ' + v);
                       if (v === 1) {
-                        hasBulb = true;
+                        hasDownlight = true;
                       } else {
-                        debugLog(pA, 'redflags', 1, 'unexpected bulb pressence value: ' + v);
+                        debugLog(pA, 'redflags', 1, 'unexpected downlight presence value: ' + v);
+                      }
+                      break;
+
+                    case 6: // uplight for es6 detected?
+                      debugLog(pA, 'cluing', 1, 'uplight equipped for es6?');
+
+                      [b, v] = getValue(b);  // uplight equipped?
+                      debugLog(pA, 'protoparse', 1, 'value: ' + v);
+                      if (v === 1) {
+                        hasUplight = true;
+                      } else {
+                        debugLog(pA, 'redflags', 1, 'unexpected uplight presence value: ' + v);
                       }
                       break;
 
                     default:
-                      debugLog(pA, 'cluing', 1, 'fell into default, field 17 message with subfield: "' + field + '"');
-                      b = b.subarray(b.length - remainingLength);
+                      debugLog(pA, 'cluing', 1, `fell into default, field 17 message with subfield: "${field}"`);
+                      b = doUnknownField(b, type, pA);
                       break;
                   }
                 }
-                bulbPresent(hasBulb, pA);
+                bulbsPresent(pA, hasDownlight, hasUplight);
                 break;
               }
 
+              case 156: { // stats (uptime) (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+                [b, length] = getVarint2(b);
+                const remainingLength = (b.length) - length;
+                while (b.length > remainingLength) {
+                  [b, type, field] = getProtoElements2(b);
+                  debugLog(pA, 'protoparse', 1, `field: ${field}, type ${type}`);
+                  switch (field) {
+                    case 1: // uptime (minutes) https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto 7/26/2022
+                    case 2:
+                    case 4:
+                      [b, v] = getValue(b);
+                      debugLog(pA, 'cluing', 6, `field 156.subfield ${field}, mystery value: ${v}`);
+                      debugLog(pA, 'protoparse', 1, 'value: ' + v);
+                      break;
+
+                    default:
+                      debugLog(pA, 'cluing', 1, `fell into default, field 156, subfield: "${field}"`);
+                      b = doUnknownField(b, type, pA);
+                      break;
+                  }
+                }
+                break;
+              }
 
               case 171: { // something to do with a "group" including group name
                 [b, length] = getVarint2(b);
@@ -1547,14 +2005,16 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
                   switch (field) {
                     case 2:
                       [b, s] = getString(b);  // ignore
+                      debugLog(pA, 'protoparse', 1, 'string: ' + s);
                       break;
                     case 3:
                       [b, s] = getString(b);  // ignore
+                      debugLog(pA, 'protoparse', 1, 'string: ' + s);
                       break;
 
                     default:
                       debugLog(pA, 'cluing', 1, 'fell into default, field 171 message with subfield: "' + field + '"');
-                      b = b.subarray(b.length - remainingLength);
+                      b = doUnknownField(b, type, pA);
                       break;
                   }
                 }
@@ -1638,7 +2098,8 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
               }
             }
           } else {
-            debugLog(pA, 'cluing', 1, 'unexpected sub level 2 field: ' + field);
+            debugLog(pA, 'cluing', 1, 'unexpected field 2 sub level 4 field: ' + field);
+            await sleep(1000);
           }
         }
       } else if (field === 5) { // seconds since unix epoch
@@ -1658,7 +2119,9 @@ function doChunk(b:Buffer, pA: BigAssFans_i6PlatformAccessory) {
   }
 }
 
-function doUnknownField(b: Buffer, type: number, pA: BigAssFans_i6PlatformAccessory) {
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function doUnknownField(b: Buffer, type: number, pA: BAF) {
   if (type === 0) {
     let value: number;
     [b, value] = getVarint2(b);
@@ -1675,6 +2138,22 @@ function doUnknownField(b: Buffer, type: number, pA: BigAssFans_i6PlatformAccess
     debugLog(pA, 'cluing', 1, ' deprecated group type');
   } else if (type === 5) {
     debugLog(pA, 'cluing', 1, ' value: ' + hexFormat(b.subarray(0, 4)));
+    b = b.subarray(4);
+  }
+  return b;
+}
+function doUnknownFieldQuietly(b: Buffer, type: number, pA: BAF) {
+  if (type === 0) {
+    [b] = getVarint2(b);
+  } else if (type === 1) {
+    b = b.subarray(8);
+  } else if (type === 2) {
+    let length: number;
+    [b, length] = getVarint2(b);
+    b = b.subarray(length);
+  } else if (type === 3 || type === 4) {
+    debugLog(pA, 'redflag', 1, ' deprecated group type');
+  } else if (type === 5) {
     b = b.subarray(4);
   }
   return b;
