@@ -1,9 +1,9 @@
 ## Release Notes
 
-## v0.5.3-beta4
+## v0.5.2-beta4
 addresses issue #16
 
-## v0.5.3-beta3
+## v0.5.2-beta3
 handles multiple lights.  Issue #10
 
 ## v0.5.2-beta2
