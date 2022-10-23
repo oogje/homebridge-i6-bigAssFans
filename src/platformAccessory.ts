@@ -128,7 +128,7 @@ export class BigAssFans_i6PlatformAccessory {
     this.debugLevels['redflags'] = 0; // 1;
     this.debugLevels['direction'] = 0; // 1
     this.debugLevels['noopcodes'] = 0;
-    this.debugLevels['protoparse'] = 0; // 1
+    this.debugLevels['protoparse'] = 0; // 2
     this.debugLevels['characteristics'] = 0;
 
     if (this.accessory.context.device.debugLevels !== undefined) {
@@ -139,7 +139,7 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     if (accessory.context.device.whoosh) {
-      hbLog.warn('use of "whoosh" configuration attribute is deprecated, please use "showWhooshSwitch" instead');
+      hbLog.warn(`${this.Name} - use of "whoosh" configuration attribute is deprecated, please use "showWhooshSwitch" instead`);
       this.showWhooshSwitch = true;
     }
     if (accessory.context.device.showWhooshSwitch) {
@@ -147,8 +147,7 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     if (accessory.context.device.dimToWarm) {
-      hbLog.warn(accessory.context.device.name +
-          '- use of "dimToWarm" configuration attribute is deprecated, please use "showDimToWarmSwitch" instead');
+      hbLog.warn(`${this.Name} - use of "dimToWarm" configuration attribute is deprecated, please use "showDimToWarmSwitch" instead`);
       this.showDimToWarmSwitch = true;
     }
     if (accessory.context.device.showDimToWarmSwitch) {
@@ -156,8 +155,7 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     if (accessory.context.device.fanAuto) {
-      hbLog.warn(accessory.context.device.name +
-        '- use of "fanAuto" configuration attribute is deprecated, please use "showFanAutoSwitch" instead');
+      hbLog.warn(`${this.Name} - use of "fanAuto" configuration attribute is deprecated, please use "showFanAutoSwitch" instead`);
       this.showFanAutoSwitch = true;
     }
     if (accessory.context.device.showFanAutoSwitch) {
@@ -165,8 +163,7 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     if (accessory.context.device.lightAuto) {
-      hbLog.warn(accessory.context.device.name +
-        '- use of "lightAuto" configuration attribute is deprecated, please use "showLightAutoSwitch" instead');
+      hbLog.warn(`${this.Name} - use of "lightAuto" configuration attribute is deprecated, please use "showLightAutoSwitch" instead`);
       this.showLightAutoSwitch = true;
     }
     if (accessory.context.device.showLightAutoSwitch) {
@@ -174,8 +171,7 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     if (accessory.context.device.ecoMode) {
-      hbLog.warn(accessory.context.device.name +
-        '- use of "ecoMode" configuration attribute is deprecated, please use "showEcoModeSwitch" instead');
+      hbLog.warn(`${this.Name} - use of "ecoMode" configuration attribute is deprecated, please use "showEcoModeSwitch" instead`);
       this.showEcoModeSwitch = true;
     }
     if (accessory.context.device.showEcoModeSwitch) {
@@ -202,7 +198,7 @@ export class BigAssFans_i6PlatformAccessory {
       this.Model = this.accessory.context.device.fanModel;
     }
 
-    const capitalizeName = accessory.context.device.name[0] === accessory.context.device.name[0].toUpperCase();
+    const capitalizeName = this.Name[0] === this.Name[0].toUpperCase();
     let accessoryName:string;
 
     this.accessory.getService(this.platform.Service.AccessoryInformation)!
@@ -212,7 +208,7 @@ export class BigAssFans_i6PlatformAccessory {
     // Fan
     this.fanService = this.accessory.getService(this.platform.Service.Fan) ||
       this.accessory.addService(this.platform.Service.Fan);
-    this.fanService.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name);
+    this.fanService.setCharacteristic(this.platform.Characteristic.Name, this.Name);
 
     this.fanService.getCharacteristic(this.platform.Characteristic.On)
       .onSet(this.setFanOnState.bind(this))
@@ -238,7 +234,7 @@ export class BigAssFans_i6PlatformAccessory {
     this.downlightBulbService = this.accessory.getService('downlight') ||
       this.accessory.addService(this.platform.Service.Lightbulb, 'downlight', 'light-1');
     accessoryName = capitalizeName ? ' Light' : ' light';
-    this.downlightBulbService.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name + accessoryName);
+    this.downlightBulbService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
 
     this.downlightBulbService.getCharacteristic(this.platform.Characteristic.On)
       .onSet(this.setDownLightOnState.bind(this))
@@ -258,7 +254,7 @@ export class BigAssFans_i6PlatformAccessory {
       this.temperatureSensorService = this.accessory.getService(this.platform.Service.TemperatureSensor) ||
         this.accessory.addService(this.platform.Service.TemperatureSensor);
       accessoryName = capitalizeName ?  ' Temperature' : ' temperature';
-      this.temperatureSensorService.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name + accessoryName);
+      this.temperatureSensorService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
       this.temperatureSensorService.getCharacteristic(this.platform.Characteristic.CurrentTemperature)
         .onGet(this.getCurrentTemperature.bind(this));
     } else {
@@ -274,7 +270,7 @@ export class BigAssFans_i6PlatformAccessory {
     this.humiditySensorService = this.accessory.getService(this.platform.Service.HumiditySensor) ||
       this.accessory.addService(this.platform.Service.HumiditySensor);
     accessoryName = capitalizeName ?  ' Humidity' : ' humidity';
-    this.humiditySensorService.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name + accessoryName);
+    this.humiditySensorService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
 
     this.humiditySensorService.getCharacteristic(this.platform.Characteristic.CurrentRelativeHumidity)
       .onGet(this.getCurrentRelativeHumidity.bind(this));
@@ -284,7 +280,7 @@ export class BigAssFans_i6PlatformAccessory {
       this.whooshSwitchService = this.accessory.getService('whooshSwitch') ||
         this.accessory.addService(this.platform.Service.Switch, 'whooshSwitch', 'switch-1');
       accessoryName = capitalizeName ?  ' Whoosh' : ' whoosh';
-      this.whooshSwitchService.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name + accessoryName);
+      this.whooshSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
 
       this.whooshSwitchService.getCharacteristic(this.platform.Characteristic.On)
         .onSet(this.setWhooshSwitchOnState.bind(this))
@@ -299,7 +295,7 @@ export class BigAssFans_i6PlatformAccessory {
       this.dimToWarmSwitchService = this.accessory.getService('dimToWarmSwitch') ||
         this.accessory.addService(this.platform.Service.Switch, 'dimToWarmSwitch', 'switch-2');
       accessoryName = capitalizeName ?  ' Dim to Warm' : ' dim to warm';
-      this.dimToWarmSwitchService.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name + accessoryName);
+      this.dimToWarmSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
 
       this.dimToWarmSwitchService.getCharacteristic(this.platform.Characteristic.On)
         .onSet(this.setDimToWarmSwitchOnState.bind(this))
@@ -314,7 +310,7 @@ export class BigAssFans_i6PlatformAccessory {
       this.fanAutoSwitchService = this.accessory.getService('fanAutoSwitch') ||
         this.accessory.addService(this.platform.Service.Switch, 'fanAutoSwitch', 'switch-3');
       accessoryName = capitalizeName ?  ' Fan Auto' : ' fan auto';
-      this.fanAutoSwitchService.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name + accessoryName);
+      this.fanAutoSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
 
       this.fanAutoSwitchService.getCharacteristic(this.platform.Characteristic.On)
         .onSet(this.setFanAutoSwitchOnState.bind(this))
@@ -329,7 +325,7 @@ export class BigAssFans_i6PlatformAccessory {
       this.lightAutoSwitchService = this.accessory.getService('lightAutoSwitch') ||
         this.accessory.addService(this.platform.Service.Switch, 'lightAutoSwitch', 'switch-4');
       accessoryName = capitalizeName ?  ' Light Auto' : ' light auto';
-      this.lightAutoSwitchService.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name + accessoryName);
+      this.lightAutoSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
 
       this.lightAutoSwitchService.getCharacteristic(this.platform.Characteristic.On)
         .onSet(this.setLightAutoSwitchOnState.bind(this))
@@ -345,7 +341,7 @@ export class BigAssFans_i6PlatformAccessory {
       this.ecoModeSwitchService = this.accessory.getService('ecoModeSwitch') ||
         this.accessory.addService(this.platform.Service.Switch, 'ecoModeSwitch', 'switch-5');
       accessoryName = capitalizeName ?  ' Eco Mode' : ' eco mode';
-      this.ecoModeSwitchService.setCharacteristic(this.platform.Characteristic.Name, accessory.context.device.name + accessoryName);
+      this.ecoModeSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
 
       this.ecoModeSwitchService.getCharacteristic(this.platform.Characteristic.On)
         .onSet(this.setEcoModeSwitchOnState.bind(this))
@@ -805,7 +801,6 @@ function sortFunction(a, b) {
 
 function bulbsPresent(pA:BAF, downlightPresent:boolean, uplightPresent:boolean) {
   pA.bulbCount = 0;
-
 
   if (downlightPresent) {
     pA.bulbCount++;
@@ -1360,11 +1355,21 @@ function getProtoElements2(b: Buffer): [Buffer, number, number] {
   return [b.subarray(a.length), key & 0x07,  key >>> 3];
 }
 
+// protbuf types
+// 0	VARINT	int32, int64, uint32, uint64, sint32, sint64, bool, enum
+// 1	I64	fixed64, sfixed64, double
+// 2	LEN	string, bytes, embedded messages, packed repeated fields
+// 3	SGROUP	group start (deprecated)
+// 4	EGROUP	group end (deprecated)
+// 5	I32	fixed32, sfixed32, float
+
 async function preChunk(b:Buffer, pA: BAF) {
   let type: number;
   let field: number;
   let length: number;
   let s:string, v: number;
+
+  debugLog(pA, 'protoparse', 1, 'preChunk: entered');
 
   [b, type, field] = getProtoElements2(b);
   debugLog(pA, 'protoparse', 2, `field: ${field}, type ${type}`);
@@ -1497,7 +1502,7 @@ async function preChunk(b:Buffer, pA: BAF) {
                       break;
 
                     default:
-                      b = doUnknownFieldQuietly(b, type, pA);
+                      b = doUnknownField(b, type, pA);
                       break;
                   }
                 }
@@ -1528,7 +1533,7 @@ async function preChunk(b:Buffer, pA: BAF) {
                       break;
 
                     default:
-                      b = doUnknownFieldQuietly(b, type, pA);
+                      b = doUnknownField(b, type, pA);
                       break;
                   }
                 }
@@ -1558,7 +1563,7 @@ async function preChunk(b:Buffer, pA: BAF) {
                       break;
 
                     default:
-                      b = doUnknownFieldQuietly(b, type, pA);
+                      b = doUnknownField(b, type, pA);
                       break;
                   }
                 }
@@ -1582,7 +1587,7 @@ async function preChunk(b:Buffer, pA: BAF) {
                       break;
 
                     default:
-                      b = doUnknownFieldQuietly(b, type, pA);
+                      b = doUnknownField(b, type, pA);
                       break;
                   }
                 }
@@ -1590,7 +1595,7 @@ async function preChunk(b:Buffer, pA: BAF) {
               }
 
               default:
-                b = doUnknownFieldQuietly(b, type, pA);
+                b = doUnknownField(b, type, pA);
                 break;
             }
           } else if (field === 3) {  // schedule
@@ -1617,9 +1622,12 @@ async function preChunk(b:Buffer, pA: BAF) {
                         [b, s] = getString(b);  // ignore
                         break;
                       case 5:
+                      case 6:
                         [b, v] = getValue(b); // ignore
                         break;
-                      case 7: {
+                      case 7:
+                      case 8: {
+                        const field7or8 = field;
                         [b, length] = getVarint2(b);
                         const residualLength = (b.length) - length;
                         while (b.length > residualLength) {
@@ -1636,18 +1644,21 @@ async function preChunk(b:Buffer, pA: BAF) {
                                 [b, type, field] = getProtoElements2(b);
                                 switch (field) {
                                   case 1:
+                                  case 5:
                                     [b, v] = getValue(b); // ignore
                                     break;
 
                                   default:
-                                    debugLog(pA, 'cluing', 2, 'unknown schedule field ' + field);
+                                    debugLog(pA, 'cluing', 2, `          unknown schedule field 2/${field7or8}/2-${field}`);
+                                    b = doUnknownField(b, type, pA);
                                 }
                               }
                               break;
                             }
 
                             default:
-                              debugLog(pA, 'cluing', 2, 'unknown schedule field ' + field);
+                              debugLog(pA, 'cluing', 2, `        unknown schedule field 2/${field7or8}-${field}`);
+                              b = doUnknownField(b, type, pA);
                               break;
                           }
                         }
@@ -1655,7 +1666,8 @@ async function preChunk(b:Buffer, pA: BAF) {
                       }
 
                       default:
-                        debugLog(pA, 'cluing', 2, 'unknown schedule field ' + field);
+                        debugLog(pA, 'cluing', 2, `      unknown schedule field 2-${field}`);
+                        b = doUnknownField(b, type, pA);
                         break;
                     }
                   }
@@ -1663,12 +1675,14 @@ async function preChunk(b:Buffer, pA: BAF) {
                 }
 
                 default:
-                  debugLog(pA, 'cluing', 2, 'unknown schedule field ' + field);
+                  debugLog(pA, 'cluing', 2, `    unknown schedule field ${field}`);
+                  b = doUnknownField(b, type, pA);
                   break;
               }
             }
           } else {
             debugLog(pA, 'cluing', 2, 'preChunk() unexpected field 2 sub level 4 field: ' + field);
+            b = doUnknownField(b, type, pA);
             await sleep(1000);
           }
         }
@@ -1678,6 +1692,7 @@ async function preChunk(b:Buffer, pA: BAF) {
         [b, s] = getString(b);  // ignore
       } else {
         debugLog(pA, 'cluing', 1, 'preChunk() surprise field: ' + field);
+        b = doUnknownField(b, type, pA);
       }
 
       if (b.length > 0) {
@@ -1686,7 +1701,11 @@ async function preChunk(b:Buffer, pA: BAF) {
     }
   } else {
     debugLog(pA, 'redflags', 1, 'preChunk() top level message, expected field "2", got field "' + field + '"');
+    b = doUnknownField(b, type, pA);
   }
+
+  debugLog(pA, 'protoparse', 1, 'preChunk: exiting');
+
 }
 
 async function doChunk(b:Buffer, pA: BAF) {
@@ -1695,6 +1714,8 @@ async function doChunk(b:Buffer, pA: BAF) {
   let length: number;
   let s:string, v: number;
 
+  debugLog(pA, 'protoparse', 1, 'doChunk: entered');
+
   [b, type, field] = getProtoElements2(b);
   if (field === 2) { // top level
     [b, length] = getVarint2(b);
@@ -1702,7 +1723,7 @@ async function doChunk(b:Buffer, pA: BAF) {
     [b, type, field] = getProtoElements2(b);
 
     while (b.length > 0) {
-      if (field === 4) {  // level 2
+      if (field === 4)  { // level 2
         [b, length] = getVarint2(b);
 
         const remainingLength = (b.length) - length;
@@ -2048,9 +2069,12 @@ async function doChunk(b:Buffer, pA: BAF) {
                         [b, s] = getString(b);  // ignore
                         break;
                       case 5:
+                      case 6:
                         [b, v] = getValue(b); // ignore
                         break;
-                      case 7: {
+                      case 7:
+                      case 8: {
+                        const field7or8 = field;
                         [b, length] = getVarint2(b);
                         const residualLength = (b.length) - length;
                         while (b.length > residualLength) {
@@ -2066,26 +2090,29 @@ async function doChunk(b:Buffer, pA: BAF) {
                                 [b, type, field] = getProtoElements2(b);
                                 switch (field) {
                                   case 1:
+                                  case 5:
                                     [b, v] = getValue(b); // ignore
                                     break;
 
                                   default:
-                                    debugLog(pA, 'cluing', 1, 'unknown schedule field ' + field);
+                                    debugLog(pA, 'cluing', 1, `          unknown schedule field 2/${field7or8}/2-${field}`);
+                                    b = doUnknownField(b, type, pA);
                                 }
                               }
                               break;
                             }
 
                             default:
-                              debugLog(pA, 'cluing', 1, 'unknown schedule field ' + field);
-                              break;
+                              debugLog(pA, 'cluing', 1, `        unknown schedule field 2/${field7or8}-${field}`);
+                              b = doUnknownField(b, type, pA);                              break;
                           }
                         }
                         break;
                       }
 
                       default:
-                        debugLog(pA, 'cluing', 1, 'unknown schedule field ' + field);
+                        debugLog(pA, 'cluing', 1, `      unknown schedule field 2-${field}`);
+                        b = doUnknownField(b, type, pA);
                         break;
                     }
                   }
@@ -2094,11 +2121,13 @@ async function doChunk(b:Buffer, pA: BAF) {
 
                 default:
                   debugLog(pA, 'cluing', 1, 'unknown schedule field ' + field);
+                  b = doUnknownField(b, type, pA);
                   break;
               }
             }
           } else {
             debugLog(pA, 'cluing', 1, 'unexpected field 2 sub level 4 field: ' + field);
+            b = doUnknownField(b, type, pA);
             await sleep(1000);
           }
         }
@@ -2108,6 +2137,7 @@ async function doChunk(b:Buffer, pA: BAF) {
         [b, s] = getString(b);  // ignore
       } else {
         debugLog(pA, 'cluing', 1, 'surprise field: ' + field);
+        b = doUnknownField(b, type, pA);
       }
 
       if (b.length > 0) {
@@ -2116,7 +2146,11 @@ async function doChunk(b:Buffer, pA: BAF) {
     }
   } else {
     debugLog(pA, 'redflags', 1, 'top level message, expected field "2", got field "' + field + '"');
+    b = doUnknownField(b, type, pA);
   }
+
+  debugLog(pA, 'protoparse', 1, 'doChunk: leaving');
+
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -2142,22 +2176,22 @@ function doUnknownField(b: Buffer, type: number, pA: BAF) {
   }
   return b;
 }
-function doUnknownFieldQuietly(b: Buffer, type: number, pA: BAF) {
-  if (type === 0) {
-    [b] = getVarint2(b);
-  } else if (type === 1) {
-    b = b.subarray(8);
-  } else if (type === 2) {
-    let length: number;
-    [b, length] = getVarint2(b);
-    b = b.subarray(length);
-  } else if (type === 3 || type === 4) {
-    debugLog(pA, 'redflag', 1, ' deprecated group type');
-  } else if (type === 5) {
-    b = b.subarray(4);
-  }
-  return b;
-}
+// function doUnknownFieldQuietly(b: Buffer, type: number, pA: BAF) {
+//   if (type === 0) {
+//     [b] = getVarint2(b);
+//   } else if (type === 1) {
+//     b = b.subarray(8);
+//   } else if (type === 2) {
+//     let length: number;
+//     [b, length] = getVarint2(b);
+//     b = b.subarray(length);
+//   } else if (type === 3 || type === 4) {
+//     debugLog(pA, 'redflag', 1, ' deprecated group type');
+//   } else if (type === 5) {
+//     b = b.subarray(4);
+//   }
+//   return b;
+// }
 
 function getString(b: Buffer) : [Buffer, string] {
   let length: number;

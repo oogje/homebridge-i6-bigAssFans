@@ -1,13 +1,16 @@
 ## Release Notes
 
+## v0.5.3-beta4
+addresses issue #16
+
 ## v0.5.3-beta3
-attempt to handle multiple lights.  Issue #10
+handles multiple lights.  Issue #10
 
 ## v0.5.2-beta2
 guessing how to recognize light presence on Haiku H/I Series Gen. 3 fan.  Issue #14
 
 ## v0.5.2-beta1
-adds config attribute to ignore fan direction control `disableDirectionControl`
+adds config attribute to ignore fan direction control `disableDirectionControl`.  Issue #13
 
 ## v0.5.1
 same as v0.5.0-beta3 but with typo fixes in comments and nascent ideas for es6 support
