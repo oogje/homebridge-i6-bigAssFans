@@ -1870,7 +1870,6 @@ async function doChunk(b:Buffer, pA: BAF) {
               case 61:  // comfort_heat_assist_speed (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
               case 62:  // comfort_heat_assist_reverse_enable (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
               case 64:  // current_rpm (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
-              case 66:
               case 72:
               // case 82:
               /* falls through */
