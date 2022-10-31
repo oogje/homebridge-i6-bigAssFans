@@ -1454,6 +1454,7 @@ async function preChunk(b:Buffer, pA: BAF) {
               case 64:  // current_rpm (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
               case 65:  // eco mode (haiku)
               case 66:  // occupancy detection (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+              case 67:
               case 68:  // light on/off/auto
               case 69:  // light brightness
               case 70:  // brightness as level (0,1-16)
@@ -1869,6 +1870,7 @@ async function doChunk(b:Buffer, pA: BAF) {
               case 61:  // comfort_heat_assist_speed (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
               case 62:  // comfort_heat_assist_reverse_enable (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
               case 64:  // current_rpm (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+              case 66:
               case 72:
               // case 82:
               /* falls through */
