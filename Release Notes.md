@@ -1,5 +1,8 @@
 ## Release Notes
 
+## v0.5.2
+incorporates bug fixes and enhancements from v05.2 betas
+
 ## v0.5.2-beta4
 addresses issue #16
 
