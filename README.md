@@ -162,6 +162,11 @@ Homebridge debug mode:
 homebridge -D
 ```
 
+Check out the [Issues](https://github.com/oogje/homebridge-i6-bigAssFans/issues?q=) (open and closed) for something relevant to the problem your experiencing.
+
+Perhaps try running the most recent beta shown in the list of [npm versions](https://www.npmjs.com/package/homebridge-i6-bigassfans?activeTab=versions).  The [Release Notes](https://github.com/oogje/homebridge-i6-bigAssFans/blob/main/Release%20Notes.md) include tidbits about the betas.
+
+
 ## Special thanks
 
 [@bdraco](https://github.com/bdraco) for suggesting BAF is using protobufs and [@jfroy](https://github.com/jfroy) for building a working BAF controller using protobufs.
