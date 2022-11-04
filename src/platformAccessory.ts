@@ -236,6 +236,8 @@ export class BigAssFans_i6PlatformAccessory {
 
     // Downlight Bulb
     // We assume the downlight is present and we'll delete it later if we find out there isn't one.
+
+    // But first we'll issue this advisory
     const pre052beta3lightBulbService = this.accessory.getService(this.platform.Service.Lightbulb);
     if (pre052beta3lightBulbService) {
       hbLog.info(this.Name + ' - Presently cached light deprecated.  Extraneous light present.  Clear cache to remove it. See issue #17');

@@ -1,7 +1,7 @@
 ## Release Notes
 
 ## v0.5.3-beta1
-issues advisory to log file about extra light
+issue advisory to log file about extra light
 
 eliminated extra protobuf decode pass for detecting active bulb early
 
