@@ -1,5 +1,8 @@
 ## Release Notes
 
+## v0.5.3-beta3
+beta2 was a fail, trying again.
+
 ## v0.5.3-beta2
 remove cached light left over from versions before dual light support.
 

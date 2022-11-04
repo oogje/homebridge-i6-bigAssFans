@@ -239,7 +239,7 @@ export class BigAssFans_i6PlatformAccessory {
 
     // But first we'll issue this advisory
     const pre052beta3lightBulbService = this.accessory.getService(this.platform.Service.Lightbulb);
-    if (pre052beta3lightBulbService && !this.accessory.getService('downlight')) {
+    if (pre052beta3lightBulbService) {
     /*
      * hbLog.info(`${this.Name} - Presently cached light deprecated.  Extraneous light present.  Clear cache to remove it. See issue #17`);
      */
