@@ -1,7 +1,36 @@
 ## Release Notes
 
+## v0.5.3-beta1
+eliminated extra protobuf decode pass for detecting active bulb early
+
+can change debugLevels via a tcp socket.  the socket number is shown in the log file upon start-up.
+By default this feature is not enabled.  Setting `"enableDebugPort"` to `true` in json.config for a fan enables it for that fan.
+example (newline alone lists current debugLevels):
+```sh
+$ nc localhost 52569
+Big Fan
+
+  light, 0
+  cluing, 0
+  network, 0
+  newcode, 0
+  humidity, 0
+  progress, 0
+  redflags, 1
+  direction, 0
+  noopcodes, 0
+  protoparse, 0
+  characteristics, 0
+newcode, 1
+newcode set to 1
+newcode, 0
+newcode set to 0
+```
+
 ## v0.5.2
-incorporates bug fixes and enhancements from v05.2 betas
+incorporates bug fixes and features from v05.2 betas
+
+When updating from releases prior to v05.2-beta3, an extraneous light will appear.  To remove it, clear the cache.  See Issue #17.
 
 ## v0.5.2-beta4
 addresses issue #16
