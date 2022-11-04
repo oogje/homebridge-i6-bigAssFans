@@ -1,5 +1,8 @@
 ## Release Notes
 
+## v0.5.3-beta2
+remove cached light left over from versions before dual light support.
+
 ## v0.5.3-beta1
 issue advisory to log file about extra light
 

@@ -239,8 +239,12 @@ export class BigAssFans_i6PlatformAccessory {
 
     // But first we'll issue this advisory
     const pre052beta3lightBulbService = this.accessory.getService(this.platform.Service.Lightbulb);
-    if (pre052beta3lightBulbService) {
-      hbLog.info(this.Name + ' - Presently cached light deprecated.  Extraneous light present.  Clear cache to remove it. See issue #17');
+    if (pre052beta3lightBulbService && !this.accessory.getService('downlight')) {
+    /*
+     * hbLog.info(`${this.Name} - Presently cached light deprecated.  Extraneous light present.  Clear cache to remove it. See issue #17`);
+     */
+      debugLog(this, 'newcode', 1, 'removing presently cached light');
+      this.accessory.removeService(pre052beta3lightBulbService);
     }
 
     this.downlightBulbService = this.accessory.getService('downlight') ||
