@@ -3,7 +3,7 @@
 ## v0.5.2
 incorporates bug fixes and features from v05.2 betas
 
-When updating from releases prior to v05.2-beta3, an extraneous light will appear.  To remove it, clear the cache.  See Issue #17.
+When updating from releases prior to v05.2-beta3, an extraneous light may appear.  To remove it, clear the cache.  See Issue #17.
 
 ## v0.5.2-beta4
 addresses issue #16
