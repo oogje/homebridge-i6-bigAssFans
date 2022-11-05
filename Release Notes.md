@@ -1,5 +1,8 @@
 ## Release Notes
 
+## v0.5.3
+Deals with Issue #17.
+
 ## v0.5.3-beta3
 warning: this will remove the automations associated with the cached defunct light.
 

@@ -237,17 +237,17 @@ export class BigAssFans_i6PlatformAccessory {
     // Downlight Bulb
     // We assume the downlight is present and we'll delete it later if we find out there isn't one.
 
-    // But first we'll issue this advisory
+    // a bunch of gynmastics here to deal with Issue #17
     const pre052beta3lightBulbService = this.accessory.getService(this.platform.Service.Lightbulb);
-    if (pre052beta3lightBulbService) {
-    /*
-     * hbLog.info(`${this.Name} - Presently cached light deprecated.  Extraneous light present.  Clear cache to remove it. See issue #17`);
-     */
-      debugLog(this, 'newcode', 1, 'removing presently cached light');
-      this.accessory.removeService(pre052beta3lightBulbService);
+    const post052beta3lightBulbService = this.accessory.getService('downlight');
+    if (pre052beta3lightBulbService && post052beta3lightBulbService) {
+      debugLog(this, 'newcode', 1, 'both generic and named LightBulb service present, removing named service');
+      this.accessory.removeService(post052beta3lightBulbService);
     }
 
-    this.downlightBulbService = this.accessory.getService('downlight') ||
+    // then down to business
+    this.downlightBulbService = this.accessory.getService(this.platform.Service.Lightbulb) ||
+      this.accessory.getService('downlight') ||
       this.accessory.addService(this.platform.Service.Lightbulb, 'downlight', 'light-1');
     accessoryName = capitalizeName ? ' Light' : ' light';
     this.downlightBulbService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
