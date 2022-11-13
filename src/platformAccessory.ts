@@ -124,6 +124,7 @@ export class BigAssFans_i6PlatformAccessory {
     this.debugLevels['cluing'] = 0; // 6;
     this.debugLevels['network'] = 0;
     this.debugLevels['newcode'] = 0;
+    this.debugLevels['funstack'] = 0;
     this.debugLevels['humidity'] = 0;
     this.debugLevels['progress'] = 0;
     this.debugLevels['redflags'] = 0; // 1;
@@ -182,6 +183,8 @@ export class BigAssFans_i6PlatformAccessory {
     if (accessory.context.device.probeFrequency !== undefined) {
       this.ProbeFrequency = accessory.context.device.probeFrequency;
       debugLog(this, 'progress',  1, 'set ProbeFrequency to: ' + this.ProbeFrequency);
+    } else {
+      debugLog(this, 'progress',  1, 'ProbeFrequency is set to: ' + this.ProbeFrequency);
     }
 
     if (accessory.context.device.disableDirectionControl) {
@@ -198,7 +201,6 @@ export class BigAssFans_i6PlatformAccessory {
 
     // I've forgotten the point of specifying a model name in the config file (unless it's devModelOverride) put
     // am not ready to delete this code yet.
-    debugLog(this, 'newcode', 1, 'user supplied model: ' + this.accessory.context.device.fanModel);
     if (this.accessory.context.device.fanModel !== undefined && this.accessory.context.device.fanModel !== 'other') {
       this.Model = this.accessory.context.device.fanModel;
     }
@@ -241,7 +243,6 @@ export class BigAssFans_i6PlatformAccessory {
     const pre052beta3lightBulbService = this.accessory.getService(this.platform.Service.Lightbulb);
     const post052beta3lightBulbService = this.accessory.getService('downlight');
     if (pre052beta3lightBulbService && post052beta3lightBulbService) {
-      debugLog(this, 'newcode', 1, 'both generic and named LightBulb service present, removing named service');
       this.accessory.removeService(post052beta3lightBulbService);
     }
 
@@ -276,8 +277,6 @@ export class BigAssFans_i6PlatformAccessory {
       const service = this.accessory.getService(this.platform.Service.TemperatureSensor);
       if (service) {
         this.accessory.removeService(service);
-      } else {
-        debugLog(this, 'newcode', 1, 'service: ' + service);
       }
     }
 
@@ -697,7 +696,6 @@ function networkSetup(pA: BAF) {
     // now I got an EPIPE 5+ hours after a reset, and repeaated EPIPEs evert minute for the next 7 minutes, then one more after 4 minutes
     // then clear sailing for 1+ hours so far.
     pA.probeTimeout = setInterval(( )=> {
-      // debugLog(pA, 'newcode', 1, "probing...");
       if (pA.client !== undefined) {
         clientWrite(pA.client, Buffer.from([0xc0, 0x12, 0x04, 0x1a, 0x02, 0x08, 0x03, 0xc0]), pA);
       } else {
@@ -728,7 +726,6 @@ function networkSetup(pA: BAF) {
     } else if (err.code === 'ECONNREFUSED') {
       hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' connection refused [ECONNREFUSED].  Check that the correct IP is in json.config.');
       if (pA.probeTimeout !== undefined) {
-        debugLog(pA, 'newcode', 1, 'clearInterval timer');
         clearInterval(pA.probeTimeout);
       }
       return;
@@ -838,9 +835,9 @@ function onData(pA: BAF, data: Buffer) {
     debugLog(pA, 'network', 11, 'raw (unstuffed) chunks[' + i + ']: ' + hexFormat(unstuff(chunks[i])));
 
     const funStack: funCall[] = buildFunStack(unstuff(chunks[i]), pA);
-    debugLog(pA, 'newcode', 1, `funstack.length: ${funStack.length}`);
+    debugLog(pA, 'funstack', 1, `funstack.length: ${funStack.length}`);
     funStack.forEach((value) => {
-      debugLog(pA, 'newcode', 1, `  ${value[0].name}(${value[1]})`);
+      debugLog(pA, 'funstack', 1, `  ${value[0].name}(${value[1]})`);
       value[0](value[1], pA);
     });
   }
@@ -913,7 +910,14 @@ function bulbsPresent(pA:BAF, downlightPresent:boolean, uplightPresent:boolean) 
 }
 function bulbsPresent2(s: string, pA: BAF) {
   const a=s.split(',');
-  bulbsPresent(pA, Boolean(a[0]==='true'), Boolean(a[1]==='true'));
+  if (pA.Model !== MODEL_HAIKU_L) {
+    bulbsPresent(pA, a[0]==='true', a[1]==='true');
+  } else {
+    if (a[1] === 'true') {
+      debugLog(pA, 'newcode', 1, 'Thwarting Haiku L attempt to assert existence of an uplight');
+    }
+    bulbsPresent(pA, Boolean(a[0]=== 'true'), false);
+  }
 }
 
 function productType(value:string, pA:BAF) {
@@ -941,7 +945,6 @@ function productType(value:string, pA:BAF) {
       // this.lightBulbService.getCharacteristic(this.platform.Characteristic.ColorTemperature)
       //   .removeAllListeners('set')
       //   .removeAllListeners('get');
-      debugLog(pA, 'newcode', 1, 'no ColorTemperature Characteristic for product type "' + pA.Model + '"');
       pA.downlightBulbService.removeCharacteristic(pA.downlightBulbService.getCharacteristic(pA.platform.Characteristic.ColorTemperature));
     }
 
@@ -949,17 +952,14 @@ function productType(value:string, pA:BAF) {
       const service = pA.accessory.getService(pA.platform.Service.HumiditySensor);
       if (service) {
         pA.accessory.removeService(service);
-        debugLog(pA, 'newcode', 1, 'no HumiditySensor service for product type "' + pA.Model + '"');
       }
     }
 
+    // Am hoping Model gets set before we ignorantly try to add an uplight.  Otherwise we might need to remove an uplight bulb service.
     if (pA.Model === MODEL_HAIKU_L) {
       const service = pA.accessory.getService(pA.platform.Service.TemperatureSensor);
       if (service) {
         pA.accessory.removeService(service);
-        debugLog(pA, 'newcode', 1, 'no TemperatureSensor service for product type "' + pA.Model + '"');
-      } else {
-        debugLog(pA, 'newcode', 1, 'service: ' + service);
       }
     }
   }
@@ -981,31 +981,36 @@ function firmwareVersion(value:string, pA: BAF) {
 }
 
 function setTargetBulb(s: string, pA:BAF) {
-  const value = Number(s);
-  debugLog(pA, ['newcode', 'light'], [1, 1], 'setTargetBulb: ' + value);
-  pA.targetBulb = value;
+  if (pA.Model !== MODEL_HAIKU_L) {
+    const value = Number(s);
+    debugLog(pA, ['newcode', 'light'], [1, 1], 'setTargetBulb: ' + value);
+    pA.targetBulb = value;
+  } else {
+    pA.targetBulb = TARGETLIGHT_DOWN;
+  }
 }
 
 function lightColorTemperature(s: string, pA:BAF) {
   const value = Number(s);
   switch (pA.targetBulb) {
     case TARGETLIGHT_UP:
-      debugLog(pA, 'newcode', 1, 'plugin does no support uplight color temperature');
       // targetedColorTemperature(value, pA.uplightBulbService, pA.uplightStates, 'Up', pA);
       break;
     case TARGETLIGHT_DOWN:
       targetedColorTemperature(value, pA.downlightBulbService, pA.downlightStates, 'Down', pA);
       break;
     case TARGETLIGHT_BOTH:
-      debugLog(pA, 'newcode', 1, 'plugin does no support uplight color temperature');
       // targetedColorTemperature(value, pA.uplightBulbService, pA.uplightStates, 'Up', pA);
       targetedColorTemperature(value, pA.downlightBulbService, pA.downlightStates, 'Down', pA);
       break;
+
+    default:
+      debugLog(pA, 'redflags', 1, `Unrecognized target bulb: ${pA.targetBulb}`);
   }
 }
 function targetedColorTemperature(value:number, service:Service, states:lightStates, description:string, pA:BAF) {
   if (service === undefined) {
-    debugLog(pA, 'newcode', 1, `lightColorTemperature: no ${description} lightbulb Service`);
+    debugLog(pA, 'redflags', 1, `lightColorTemperature: no ${description} lightbulb Service`);
     return;
   }
   if (pA.Model !== MODEL_HAIKU_HI && pA.Model !== MODEL_HAIKU_L) {
@@ -1013,8 +1018,6 @@ function targetedColorTemperature(value:number, service:Service, states:lightSta
     const mireds = Math.round(1000000 / states.ColorTemperature);
     debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} ColorTemperature: ${mireds} (${states.ColorTemperature})`);
     service.updateCharacteristic(pA.platform.Characteristic.ColorTemperature, mireds);
-  } else {
-    // debugLog(pA, 'newcode', 1, 'ColorTemperature: ignored');
   }
 }
 
@@ -1035,7 +1038,7 @@ function lightBrightness(s: string, pA:BAF) {
 }
 function targetedlightBrightness(value:number, lightBulbService:Service, states:lightStates, description:string, pA:BAF) {
   if (lightBulbService === undefined) {
-    debugLog(pA, 'newcode', 1, `lightBrightness: no ${description} lightbulb Service`);
+    debugLog(pA, 'redflags', 1, `lightBrightness: no ${description} lightbulb Service`);
     return;
   }
 
@@ -1077,7 +1080,7 @@ function targetedlightOnState(value:number, service:Service, states:lightStates,
   debugLog(pA, 'light', 1, `${description} lightOnState value: ` + value);
 
   if (service === undefined) {
-    debugLog(pA, 'newcode', 1, `lightOnState: no ${description} lightbulb Service`);
+    debugLog(pA, 'redflags', 1, `lightOnState: no ${description} lightbulb Service`);
     return;
   }
 
@@ -1155,11 +1158,13 @@ function fanRotationSpeed(s: string, pA:BAF) {
 function currentTemperature(s: string, pA:BAF) {
   const value = Number(s);
   if (!pA.accessory.getService(pA.platform.Service.TemperatureSensor)) {
-    debugLog(pA, 'newcode', 1, 'currentTemperature: no TemperatureSensor Service');
+    debugLog(pA, 'redflags', 1, 'currentTemperature: no TemperatureSensor Service');
     return;
   }
+
+  // this test is probably unnecessary
   if (pA.accessory.context.device.showTemperature !== undefined && pA.accessory.context.device.showTemperature === false) {
-    debugLog(pA, 'newcode', 1, 'ignoring temperature');
+    debugLog(pA, 'redflag', 1, 'if showTemperature is false then we should have returned per no Service test above');
     return;
   }
 
@@ -1182,15 +1187,13 @@ function currentRelativeHumidity(s: string, pA:BAF) {
   const value = Number(s);
   debugLog(pA, 'humidity', 2, pA.Name + ' - CurrentRelativeHumidity:' + value);
 
+  // this test probably makes the below, value == 1000, test redundant since Haiku's should not have HumiditySensor service anyway.
   if (!pA.accessory.getService(pA.platform.Service.HumiditySensor)) {
-    debugLog(pA, 'newcode', 1, 'currentRelativeHumidity: no HumiditySensor Service');
     return;
   }
 
-
   if (value < 0 || value > 100) {
     // Haikus don't seem to support the humidity sensor, they just report 1000%.  ignore it
-    // should replace this function with noop in property table
     if (value === 1000) {
       infoLogOnce(pA, 'current relative humidity out of range: ' + value + ', assuming no humidity sensor for model "' + pA.Model + '"');
       return;
@@ -1362,7 +1365,6 @@ const messagesLogged:string[] = [];
 
 function debugLogOnce(pA:BAF, logTag:string|string[], logLevel:number|number[], logMessage:string) {
   if (messagesLogged.includes(logMessage)) {
-    debugLog(pA, 'newcode', 2, 'redundant message: "' + logMessage + '"');
     return;
   } else {
     debugLog(pA, logTag, logLevel, logMessage);
@@ -1372,7 +1374,6 @@ function debugLogOnce(pA:BAF, logTag:string|string[], logLevel:number|number[], 
 
 function infoLogOnce(pA:BAF, logMessage: string) {
   if (messagesLogged.includes(logMessage)) {
-    debugLog(pA, 'newcode', 2, 'redundant message: "' + logMessage + '"');
     return;
   } else {
     hbLog.info(pA.Name + ' - ' + logMessage);
@@ -1390,7 +1391,7 @@ function clientWrite(client, b, pA:BAF) {
   }
 }
 
-function getVarint2(b: Buffer): [Buffer, number] {
+function getVarint(b: Buffer): [Buffer, number] {
   let r = 0;
   const a: number[] = [];
 
@@ -1410,7 +1411,7 @@ function getVarint2(b: Buffer): [Buffer, number] {
   return [b.subarray(a.length), r];
 }
 
-function getProtoElements2(b: Buffer): [Buffer, number, number] {
+function getProtoElements(b: Buffer): [Buffer, number, number] {
   // key is a varint
   let key = 0;
   const a: number[] = [];
@@ -1451,23 +1452,25 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
 
   debugLog(pA, 'protoparse', 1, 'buildFunStack: entered');
 
-  [b, type, field] = getProtoElements2(b);
+  [b, type, field] = getProtoElements(b);
+  debugLog(pA, 'protoparse', 1, 'field: ' + field);
   if (field === 2) { // top level
-    [b, length] = getVarint2(b);
-    [b, type, field] = getProtoElements2(b);
+    [b, length] = getVarint(b);
+    [b, type, field] = getProtoElements(b);
+    debugLog(pA, 'protoparse', 1, '  field: ' + field);
 
     while (b.length > 0) {
       if (field === 4)  { // level 2
-        [b, length] = getVarint2(b);
+        [b, length] = getVarint(b);
         const remainingLength = (b.length) - length;
 
         while (b.length > remainingLength) {
-          [b, type, field] = getProtoElements2(b);
-          debugLog(pA, 'protoparse', 1, 'field: ' + field);
+          [b, type, field] = getProtoElements(b);
+          debugLog(pA, 'protoparse', 1, '    field: ' + field);
           if (field === 2) {
-            [b, length] = getVarint2(b);
-            [b, type, field] = getProtoElements2(b);
-            debugLog(pA, 'protoparse', 1, '  field: ' + field);
+            [b, length] = getVarint(b);
+            [b, type, field] = getProtoElements(b);
+            debugLog(pA, 'protoparse', 1, '      field: ' + field);
             switch (field) {
               case 2: // product type
                 [b, s] = getString(b);
@@ -1582,7 +1585,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               case 136: // legacy_ir_remote_enable (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto) [haiku only?]
               case 150: // prevent additional controls
                 [b, v] = getValue(b); // ignore
-                debugLog(pA, 'protoparse', 1, '  value: ' + v);
+                debugLog(pA, 'protoparse', 1, '        value: ' + v);
                 break;
 
               // mystery strings
@@ -1595,8 +1598,8 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               case 76:
               case 83:
                 [b, s] = getString(b);
+                debugLog(pA, 'protoparse', 1, `        string: "${s}"`);
                 debugLog(pA, 'cluing', 6, 'field ' + field + ', mystery string: ' + s);
-                debugLog(pA, 'protoparse', 1, '  string: ' + s);
                 break;
 
               // mystery numbers
@@ -1618,7 +1621,9 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               case 61:  // comfort_heat_assist_speed (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
               case 62:  // comfort_heat_assist_reverse_enable (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
               case 64:  // current_rpm (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+              case 67:  // issue #17/Kohle81/Ventilator (Haiku L Series [3.1.1])
               case 72:
+              case 84:  // issue #17/Kohle81/Ventilator (Haiku L Series [3.1.1])
               case 89:
               case 109:
               case 118:
@@ -1635,18 +1640,23 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               case 175:
                 [b, v] = getValue(b);
                 debugLog(pA, 'cluing', 6, 'field ' + field + ', mystery number: ' + v);
-                debugLog(pA, 'protoparse', 1, '  value: ' + v);
+                debugLog(pA, 'protoparse', 1, '        value: ' + v);
                 break;
 
               case 124: { // WiFi messages
-                [b, length] = getVarint2(b);
+                [b, length] = getVarint(b);
                 const remainingLength = (b.length) - length;
                 while (b.length > remainingLength) {
-                  [b, type, field] = getProtoElements2(b);
+                  [b, type, field] = getProtoElements(b);
+                  debugLog(pA, 'protoparse', 1, '        field: ' + field);
                   switch (field) {
                     case 1: // SSID
                       [b, s] = getString(b); // ignore
-                      debugLog(pA, 'protoparse', 1, 'string: ' + s);
+                      debugLog(pA, 'protoparse', 1, `          string: "${s}"`);
+                      break;
+                    case 2: // RSSI (signal strength) in dBm?
+                      [b, v] = getValue(b); // ignore
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
                       break;
 
                     default:
@@ -1660,20 +1670,23 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
 
               case 16:  // firmware (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
               case 152: { // remote_firmware (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
-                [b, length] = getVarint2(b);
+                [b, length] = getVarint(b);
                 const remainingLength = (b.length) - length;
                 while (b.length > remainingLength) {
-                  [b, type, field] = getProtoElements2(b);
+                  [b, type, field] = getProtoElements(b);
+                  debugLog(pA, 'protoparse', 1, '        field: ' + field);
                   switch (field) {
                     case 1:
+                    case 5: // issue #10/Emotive9/Family Room (es6 [3.1.0])
+                    case 6: // issue #10/Emotive9/Family Room (es6 [3.1.0])
                       [b, v] = getValue(b); // ignore
-                      debugLog(pA, 'protoparse', 1, 'value: ' + v);
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
                       break;
                     case 2:
                     case 3:
                     case 4:
                       [b, s] = getString(b); // ignore
-                      debugLog(pA, 'protoparse', 1, 'string: ' + s);
+                      debugLog(pA, 'protoparse', 1, `          string: "${s}"`);
                       break;
 
                     default:
@@ -1688,10 +1701,11 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               case 17: { // capabilities (include light pressence)
                 let hasDownlight = false;
                 let hasUplight = false;
-                [b, length] = getVarint2(b);
+                [b, length] = getVarint(b);
                 const remainingLength = (b.length) - length;
                 while (b.length > remainingLength) {
-                  [b, type, field] = getProtoElements2(b);
+                  [b, type, field] = getProtoElements(b);
+                  debugLog(pA, 'protoparse', 1, '        field: ' + field);
                   switch (field) {
                     case 1: // has comfort (https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto 7/26/2022)
                     case 3: // has comfort (https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto 7/26/2022)
@@ -1703,16 +1717,15 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                     case 13:
                     case 14:
                       [b, v] = getValue(b);  // ignore
-                      debugLog(pA, 'protoparse', 1, 'value: ' + v);
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
                       debugLog(pA, 'cluing', 6, `field 17, mystery field: ${field}, value: ${v}`);
                       break;
 
-                    case 2: // bulb equipped for 3rd Gen Haiku H/I Series?
-                      debugLog(pA, 'cluing', 1, 'downlight equipped for 3rd Gen Haiku H/I Series?');
-                      // falls through
+                    case 2: // downlight
                     case 4:
-                      [b, v] = getValue(b);  // bulb equipped?
-                      debugLog(pA, 'protoparse', 1, 'value: ' + v);
+                      [b, v] = getValue(b);
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
+                      debugLog(pA, 'cluing', 1, `downlight equipped per field ${field}`);
                       if (v === 1) {
                         hasDownlight = true;
                       } else {
@@ -1724,7 +1737,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                       debugLog(pA, 'cluing', 1, 'uplight equipped for es6?');
 
                       [b, v] = getValue(b);  // uplight equipped?
-                      debugLog(pA, 'protoparse', 1, 'value: ' + v);
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
                       if (v === 1) {
                         hasUplight = true;
                       } else {
@@ -1744,18 +1757,21 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               }
 
               case 156: { // stats (uptime) (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
-                [b, length] = getVarint2(b);
+                [b, length] = getVarint(b);
                 const remainingLength = (b.length) - length;
                 while (b.length > remainingLength) {
-                  [b, type, field] = getProtoElements2(b);
-                  debugLog(pA, 'protoparse', 1, `field: ${field}, type ${type}`);
+                  [b, type, field] = getProtoElements(b);
+                  debugLog(pA, 'protoparse', 1, `        field: ${field}`);
                   switch (field) {
                     case 1: // uptime (minutes) https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto 7/26/2022
                     case 2:
                     case 4:
+                    case 5:
+                    case 6: // issue #17-19/afello77/Haiku L Series [3.1.1])
+                    case 7:
                       [b, v] = getValue(b);
-                      debugLog(pA, 'cluing', 6, `field 156.subfield ${field}, mystery value: ${v}`);
-                      debugLog(pA, 'protoparse', 1, 'value: ' + v);
+                      debugLog(pA, 'cluing', 6, `field 156/${field}, mystery value: ${v}`);
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
                       break;
 
                     default:
@@ -1768,22 +1784,162 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               }
 
               case 171: { // something to do with a "group" including group name
-                [b, length] = getVarint2(b);
+                [b, length] = getVarint(b);
                 const remainingLength = (b.length) - length;
                 while (b.length > remainingLength) {
-                  [b, type, field] = getProtoElements2(b);
+                  [b, type, field] = getProtoElements(b);
+                  debugLog(pA, 'protoparse', 1, `        field: ${field}`);
                   switch (field) {
                     case 2:
                       [b, s] = getString(b);  // ignore
-                      debugLog(pA, 'protoparse', 1, 'string: ' + s);
+                      debugLog(pA, 'protoparse', 1, `          string: "${s}"`);
                       break;
                     case 3:
                       [b, s] = getString(b);  // ignore
-                      debugLog(pA, 'protoparse', 1, 'string: ' + s);
+                      debugLog(pA, 'protoparse', 1, `          string: "${s}"`);
                       break;
 
                     default:
                       debugLog(pA, 'cluing', 1, 'fell into default, field 171 message with subfield: "' + field + '"');
+                      b = doUnknownField(b, type, pA);
+                      break;
+                  }
+                }
+                break;
+              }
+
+              case 176: {  // issue #17/Kohle81/Ventilator (Haiku L Series [3.1.1])
+                [b, length] = getVarint(b);
+                const remainingLength = (b.length) - length;
+                while (b.length > remainingLength) {
+                  [b, type, field] = getProtoElements(b);
+                  debugLog(pA, 'protoparse', 1, `        field: ${field}`);
+                  switch (field) {
+                    case 1:
+                    case 2:
+                    case 4:
+                    case 5:
+                    case 7:
+                      [b, v] = getValue(b);
+                      debugLog(pA, 'cluing', 6, `field 176/${field}, mystery value: ${v}`);
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
+                      break;
+
+                    case 3: {
+                      [b, length] = getVarint(b);
+                      const remainingLength = (b.length) - length;
+                      while (b.length > remainingLength) {
+                        [b, type, field] = getProtoElements(b);
+                        debugLog(pA, 'protoparse', 1, `          field: ${field}`);
+                        switch (field) {
+                          case 0:
+                            [b, s] = getString(b);  // ignore
+                            debugLog(pA, 'protoparse', 1, `            string: "${s}"`);
+                            break;
+
+                          default:
+                            debugLog(pA, 'cluing', 1, `fell into default, field 176/3 message with subfield: "${field}"`);
+                            b = doUnknownField(b, type, pA);
+                            break;
+                        }
+                      }
+                      break;
+                    }
+
+                    default:
+                      debugLog(pA, 'cluing', 1, `fell into default, field 176 message with subfield: "${field}"`);
+                      b = doUnknownField(b, type, pA);
+                      break;
+                  }
+                }
+                break;
+              }
+
+              case 177: {  // issue #17/Kohle81/Ventilator (Haiku L Series [3.1.1])
+                [b, length] = getVarint(b);
+                const remainingLength = (b.length) - length;
+                while (b.length > remainingLength) {
+                  [b, type, field] = getProtoElements(b);
+                  debugLog(pA, 'protoparse', 1, `        field: ${field}`);
+                  switch (field) {
+                    case 4:
+                    case 5:
+                    case 7:
+                      [b, v] = getValue(b);
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
+                      debugLog(pA, 'cluing', 6, `field 177/${field}, mystery number: ${v}`);
+                      break;
+
+                    case 3:
+                      [b, s] = getString(b);  // ignore
+                      debugLog(pA, 'protoparse', 1, `          string: "${s}"`);
+                      debugLog(pA, 'cluing', 6, `field 177/${field}, mystery string: "${s}"`);
+                      break;
+
+                    default:
+                      debugLog(pA, 'cluing', 1, `fell into default, field 177 message with subfield: "${field}"`);
+                      b = doUnknownField(b, type, pA);
+                      break;
+                  }
+                }
+                break;
+              }
+
+              case 178: {  // issue #17/Kohle81/Ventilator (Haiku L Series [3.1.1])
+                [b, length] = getVarint(b);
+                const remainingLength = (b.length) - length;
+                while (b.length > remainingLength) {
+                  [b, type, field] = getProtoElements(b);
+                  debugLog(pA, 'protoparse', 1, `        field: ${field}`);
+                  switch (field) {
+                    case 1:
+                    case 4:
+                    case 5:
+                    case 7:
+                      [b, v] = getValue(b);
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
+                      debugLog(pA, 'cluing', 6, `field 178/${field}, mystery number: ${v}`);
+                      break;
+
+                    case 3:
+                      [b, s] = getString(b);  // ignore
+                      debugLog(pA, 'protoparse', 1, `          string: "${s}"`);
+                      debugLog(pA, 'cluing', 6, `field 178/${field}, mystery string: "${s}"`);
+                      break;
+
+                    default:
+                      debugLog(pA, 'cluing', 1, `fell into default, field 178 message with subfield: "${field}"`);
+                      b = doUnknownField(b, type, pA);
+                      break;
+                  }
+                }
+                break;
+              }
+
+              case 179: {  // issue #17/Kohle81/Ventilator (Haiku L Series [3.1.1])
+                [b, length] = getVarint(b);
+                const remainingLength = (b.length) - length;
+                while (b.length > remainingLength) {
+                  [b, type, field] = getProtoElements(b);
+                  debugLog(pA, 'protoparse', 1, `        field: ${field}`);
+                  switch (field) {
+                    case 2:
+                    case 4:
+                    case 5:
+                    case 7:
+                      [b, v] = getValue(b);
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
+                      debugLog(pA, 'cluing', 6, `field 179/${field}, mystery number: ${v}`);
+                      break;
+
+                    case 3:
+                      [b, s] = getString(b);  // ignore
+                      debugLog(pA, 'protoparse', 1, `          string: "${s}"`);
+                      debugLog(pA, 'cluing', 6, `field 179/${field}, mystery string: "${s}"`);
+                      break;
+
+                    default:
+                      debugLog(pA, 'cluing', 1, `fell into default, field 179 message with subfield: "${field}"`);
                       b = doUnknownField(b, type, pA);
                       break;
                   }
@@ -1797,54 +1953,64 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 break;
             }
           } else if (field === 3) {  // schedule
-            [b, length] = getVarint2(b);
+            [b, length] = getVarint(b);
             const residualLength = (b.length) - length;
             while (b.length > residualLength) {
-              [b, type, field] = getProtoElements2(b);
+              [b, type, field] = getProtoElements(b);
+              debugLog(pA, 'protoparse', 1, '      field: ' + field);
               switch (field) {
                 case 1:
                 case 3:
                 case 4:
                   [b, v] = getValue(b); // ignore
+                  debugLog(pA, 'protoparse', 1, '        value: ' + v);
                   break;
                 case 2: {
-                  [b, length] = getVarint2(b);
+                  [b, length] = getVarint(b);
                   const residualLength = (b.length) - length;
                   while (b.length > residualLength) {
-                    [b, type, field] = getProtoElements2(b);
+                    [b, type, field] = getProtoElements(b);
+                    debugLog(pA, 'protoparse', 1, '        field: ' + field);
                     switch (field) {
                       case 2:
                       case 4:
                         [b, s] = getString(b);  // ignore
+                        debugLog(pA, 'protoparse', 1, `          string: "${s}"`);
                         break;
                       case 5:
                       case 6:
                         [b, v] = getValue(b); // ignore
+                        debugLog(pA, 'protoparse', 1, '          value: ' + v);
                         break;
                       case 7:
                       case 8: {
                         const field7or8 = field;
-                        [b, length] = getVarint2(b);
+                        [b, length] = getVarint(b);
                         const residualLength = (b.length) - length;
                         while (b.length > residualLength) {
-                          [b, type, field] = getProtoElements2(b);
+                          [b, type, field] = getProtoElements(b);
+                          debugLog(pA, 'protoparse', 1, '          field: ' + field);
                           switch (field) {
                             case 1:
                               [b, s] = getString(b);  // ignore
+                              debugLog(pA, 'protoparse', 1, `            string: "${s}"`);
                               break;
                             case 2: {
-                              [b, length] = getVarint2(b);
+                              [b, length] = getVarint(b);
                               const residualLength = (b.length) - length;
                               while (b.length > residualLength) {
-                                [b, type, field] = getProtoElements2(b);
+                                [b, type, field] = getProtoElements(b);
+                                debugLog(pA, 'protoparse', 1, '            field: ' + field);
                                 switch (field) {
                                   case 1:
                                   case 5:
+                                  case 6:
                                     [b, v] = getValue(b); // ignore
+                                    debugLog(pA, 'protoparse', 1, '              value: ' + v);
                                     break;
 
                                   default:
-                                    debugLog(pA, 'cluing', 1, `          unknown schedule field 2/${field7or8}/2-${field}`);
+                                    debugLog(pA, 'cluing', 1, `            unknown schedule field 2/${field7or8}/2/${field}`);
                                     b = doUnknownField(b, type, pA);
                                 }
                               }
@@ -1852,7 +2018,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                             }
 
                             default:
-                              debugLog(pA, 'cluing', 1, `        unknown schedule field 2/${field7or8}-${field}`);
+                              debugLog(pA, 'cluing', 1, `          unknown schedule field 2/${field7or8}-${field}`);
                               b = doUnknownField(b, type, pA);                              break;
                           }
                         }
@@ -1860,7 +2026,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                       }
 
                       default:
-                        debugLog(pA, 'cluing', 1, `      unknown schedule field 2-${field}`);
+                        debugLog(pA, 'cluing', 1, `        unknown schedule field 2-${field}`);
                         b = doUnknownField(b, type, pA);
                         break;
                     }
@@ -1890,7 +2056,8 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
       }
 
       if (b.length > 0) {
-        [b, type, field] = getProtoElements2(b);
+        [b, type, field] = getProtoElements(b);
+        debugLog(pA, 'protoparse', 1, '    field: ' + field);
       }
     }
   } else {
@@ -1908,18 +2075,18 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
 function doUnknownField(b: Buffer, type: number, pA: BAF) {
   if (type === 0) {
     let value: number;
-    [b, value] = getVarint2(b);
+    [b, value] = getVarint(b);
     debugLog(pA, 'cluing', 1, ' value: ' + value);
   } else if (type === 1) {
     debugLog(pA, 'cluing', 1, ' value: ' + hexFormat(b.subarray(0, 8)));
     b = b.subarray(8);
   } else if (type === 2) {
     let length: number;
-    [b, length] = getVarint2(b);
+    [b, length] = getVarint(b);
     debugLog(pA, 'cluing', 1, ' length: ' + length);
     b = b.subarray(length);
   } else if (type === 3 || type === 4) {
-    debugLog(pA, 'cluing', 1, ' deprecated group type');
+    debugLog(pA, 'cluing', 1, ' deprecated protobuf group type');
   } else if (type === 5) {
     debugLog(pA, 'cluing', 1, ' value: ' + hexFormat(b.subarray(0, 4)));
     b = b.subarray(4);
@@ -1928,12 +2095,12 @@ function doUnknownField(b: Buffer, type: number, pA: BAF) {
 }
 // function doUnknownFieldQuietly(b: Buffer, type: number, pA: BAF) {
 //   if (type === 0) {
-//     [b] = getVarint2(b);
+//     [b] = getVarint(b);
 //   } else if (type === 1) {
 //     b = b.subarray(8);
 //   } else if (type === 2) {
 //     let length: number;
-//     [b, length] = getVarint2(b);
+//     [b, length] = getVarint(b);
 //     b = b.subarray(length);
 //   } else if (type === 3 || type === 4) {
 //     debugLog(pA, 'redflag', 1, ' deprecated group type');
@@ -1945,13 +2112,13 @@ function doUnknownField(b: Buffer, type: number, pA: BAF) {
 
 function getString(b: Buffer) : [Buffer, string] {
   let length: number;
-  [b, length] = getVarint2(b);
+  [b, length] = getVarint(b);
   return [b.subarray(length), b.subarray(0, length).toString()];
 }
 
 function getValue(b: Buffer) : [Buffer, number] {
   let varInt: number;
-  [b, varInt] = getVarint2(b);
+  [b, varInt] = getVarint(b);
 
   return [b, varInt];
 }
