@@ -1,5 +1,8 @@
 ## Release Notes
 
+## v0.5.4-beta1
+Deal with Issue #19.
+
 ## v0.5.3
 Deals with Issue #17.
 
