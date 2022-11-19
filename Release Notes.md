@@ -1,6 +1,6 @@
 ## Release Notes
 
-## v0.5.4-beta2
+### v0.5.4-beta2
 Addresses Issue #20
 >ignore message with field 17 sub-field 2 issued by an es6 fan.
 
@@ -10,19 +10,19 @@ set ConfiguredName to appease iOS/iPadOs 16.
 
 if there aren't two lights, ignore targetBulb and use whichever bulbService is present.
 
-## v0.5.4-beta1
+### v0.5.4-beta1
 Deal with Issue #19.
 
-## v0.5.3
+### v0.5.3
 Deals with Issue #17.
 
-## v0.5.3-beta3
+### v0.5.3-beta3
 warning: this will remove the automations associated with the cached defunct light.
 
-## v0.5.3-beta2
+### v0.5.3-beta2
 remove cached light left over from versions before dual light support.
 
-## v0.5.3-beta1
+### v0.5.3-beta1
 issue advisory to log file about extra light
 
 eliminated extra protobuf decode pass for detecting active bulb early
@@ -51,36 +51,36 @@ newcode, 0
 newcode set to 0
 ```
 
-## v0.5.2
+### v0.5.2
 incorporates bug fixes and features from v05.2 betas
 
 When updating from releases prior to v05.2-beta3, an extraneous light may appear.  To remove it, clear the cache.  See Issue #17.
 
-## v0.5.2-beta4
+### v0.5.2-beta4
 addresses issue #16
 
-## v0.5.2-beta3
+### v0.5.2-beta3
 handles multiple lights.  Issue #10
 
-## v0.5.2-beta2
+### v0.5.2-beta2
 guessing how to recognize light presence on Haiku H/I Series Gen. 3 fan.  Issue #14
 
-## v0.5.2-beta1
+### v0.5.2-beta1
 adds config attribute to ignore fan direction control `disableDirectionControl`.  Issue #13
 
-## v0.5.1
+### v0.5.1
 same as v0.5.0-beta3 but with typo fixes in comments and nascent ideas for es6 support
 
-## v0.5.0-beta3
+### v0.5.0-beta3
 addresses the bug described in Issue #9 where turning on Auto Light with `showAutoLight` configuration attribute `false` crashes homebridge
 
-## v0.5.0-beta2
+### v0.5.0-beta2
 message parsing engine re-written taking into account message are formatted as Protocol Buffers - thanks to @bdraco for
 suggesting protobufs and @jfroy for building a working implementation.
 
 deprecating switch attribute names in config for more descriptive names.  E.g. `ecoMode` -> `showEcoModeSwitch`
 
-## v0.4.3
+### v0.4.3
 
 ### Bugs
 Handle case where the length of a message was 0x22 bytes (as when a group name was exactly seven characters long).  Issue #8
@@ -91,7 +91,7 @@ Fix debugLogs tag typo.
 ### Other
 Include fan name in more log messages.
 
-## v0.4.2
+### v0.4.2
 
 ### Bugs
 Eco Mode Switch had wrong description (Add a switch for 'Dim to Warm’) in configuration UI.  
