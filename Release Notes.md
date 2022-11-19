@@ -1,5 +1,15 @@
 ## Release Notes
 
+## v0.5.4-beta2
+Addresses Issue #20
+>ignore message with field 17 sub-field 2 issued by an es6 fan.
+
+>add UC-V switch when equipped.
+
+set ConfiguredName to appease iOS/iPadOs 16.
+
+if there aren't two lights, ignore targetBulb and use whichever bulbService is present.
+
 ## v0.5.4-beta1
 Deal with Issue #19.
 

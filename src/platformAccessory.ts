@@ -43,6 +43,7 @@ export class BigAssFans_i6PlatformAccessory {
   public fanAutoSwitchService!: Service;
   public lightAutoSwitchService!: Service;
   public ecoModeSwitchService!: Service;
+  public UVCSwitchService!: Service;
 
   public downlightStates: lightStates = {
     On: false,
@@ -76,6 +77,7 @@ export class BigAssFans_i6PlatformAccessory {
   public lightAutoSwitchOn = false;
   public showEcoModeSwitch = false;
   public ecoModeSwitchOn = false;
+  public UVCSwitchOn = false;
   public disableDirectionControl = false;
   public enableDebugPort = false;
 
@@ -215,7 +217,8 @@ export class BigAssFans_i6PlatformAccessory {
     // Fan
     this.fanService = this.accessory.getService(this.platform.Service.Fan) ||
       this.accessory.addService(this.platform.Service.Fan);
-    this.fanService.setCharacteristic(this.platform.Characteristic.Name, this.Name);
+    // this.fanService.setCharacteristic(this.platform.Characteristic.Name, this.Name);
+    setName(this, this.fanService, this.Name);
 
     this.fanService.getCharacteristic(this.platform.Characteristic.On)
       .onSet(this.setFanOnState.bind(this))
@@ -251,7 +254,8 @@ export class BigAssFans_i6PlatformAccessory {
       this.accessory.getService('downlight') ||
       this.accessory.addService(this.platform.Service.Lightbulb, 'downlight', 'light-1');
     accessoryName = capitalizeName ? ' Light' : ' light';
-    this.downlightBulbService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+    // this.downlightBulbService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+    setName(this, this.downlightBulbService, this.Name + accessoryName);
 
     this.downlightBulbService.getCharacteristic(this.platform.Characteristic.On)
       .onSet(this.setDownLightOnState.bind(this))
@@ -270,7 +274,8 @@ export class BigAssFans_i6PlatformAccessory {
       this.temperatureSensorService = this.accessory.getService(this.platform.Service.TemperatureSensor) ||
         this.accessory.addService(this.platform.Service.TemperatureSensor);
       accessoryName = capitalizeName ?  ' Temperature' : ' temperature';
-      this.temperatureSensorService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+      // this.temperatureSensorService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+      setName(this, this.temperatureSensorService, this.Name + accessoryName);
       this.temperatureSensorService.getCharacteristic(this.platform.Characteristic.CurrentTemperature)
         .onGet(this.getCurrentTemperature.bind(this));
     } else {
@@ -284,7 +289,8 @@ export class BigAssFans_i6PlatformAccessory {
     this.humiditySensorService = this.accessory.getService(this.platform.Service.HumiditySensor) ||
       this.accessory.addService(this.platform.Service.HumiditySensor);
     accessoryName = capitalizeName ?  ' Humidity' : ' humidity';
-    this.humiditySensorService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+    // this.humiditySensorService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+    setName(this, this.humiditySensorService, this.Name + accessoryName);
 
     this.humiditySensorService.getCharacteristic(this.platform.Characteristic.CurrentRelativeHumidity)
       .onGet(this.getCurrentRelativeHumidity.bind(this));
@@ -294,7 +300,8 @@ export class BigAssFans_i6PlatformAccessory {
       this.whooshSwitchService = this.accessory.getService('whooshSwitch') ||
         this.accessory.addService(this.platform.Service.Switch, 'whooshSwitch', 'switch-1');
       accessoryName = capitalizeName ?  ' Whoosh' : ' whoosh';
-      this.whooshSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+      // this.whooshSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+      setName(this, this.whooshSwitchService, this.Name + accessoryName);
 
       this.whooshSwitchService.getCharacteristic(this.platform.Characteristic.On)
         .onSet(this.setWhooshSwitchOnState.bind(this))
@@ -309,7 +316,8 @@ export class BigAssFans_i6PlatformAccessory {
       this.dimToWarmSwitchService = this.accessory.getService('dimToWarmSwitch') ||
         this.accessory.addService(this.platform.Service.Switch, 'dimToWarmSwitch', 'switch-2');
       accessoryName = capitalizeName ?  ' Dim to Warm' : ' dim to warm';
-      this.dimToWarmSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+      // this.dimToWarmSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+      setName(this, this.dimToWarmSwitchService, this.Name + accessoryName);
 
       this.dimToWarmSwitchService.getCharacteristic(this.platform.Characteristic.On)
         .onSet(this.setDimToWarmSwitchOnState.bind(this))
@@ -324,7 +332,8 @@ export class BigAssFans_i6PlatformAccessory {
       this.fanAutoSwitchService = this.accessory.getService('fanAutoSwitch') ||
         this.accessory.addService(this.platform.Service.Switch, 'fanAutoSwitch', 'switch-3');
       accessoryName = capitalizeName ?  ' Fan Auto' : ' fan auto';
-      this.fanAutoSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+      // this.fanAutoSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+      setName(this, this.fanAutoSwitchService, this.Name + accessoryName);
 
       this.fanAutoSwitchService.getCharacteristic(this.platform.Characteristic.On)
         .onSet(this.setFanAutoSwitchOnState.bind(this))
@@ -339,7 +348,8 @@ export class BigAssFans_i6PlatformAccessory {
       this.lightAutoSwitchService = this.accessory.getService('lightAutoSwitch') ||
         this.accessory.addService(this.platform.Service.Switch, 'lightAutoSwitch', 'switch-4');
       accessoryName = capitalizeName ?  ' Light Auto' : ' light auto';
-      this.lightAutoSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+      // this.lightAutoSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+      setName(this, this.lightAutoSwitchService, this.Name + accessoryName);
 
       this.lightAutoSwitchService.getCharacteristic(this.platform.Characteristic.On)
         .onSet(this.setLightAutoSwitchOnState.bind(this))
@@ -355,7 +365,8 @@ export class BigAssFans_i6PlatformAccessory {
       this.ecoModeSwitchService = this.accessory.getService('ecoModeSwitch') ||
         this.accessory.addService(this.platform.Service.Switch, 'ecoModeSwitch', 'switch-5');
       accessoryName = capitalizeName ?  ' Eco Mode' : ' eco mode';
-      this.ecoModeSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+      // this.ecoModeSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+      setName(this, this.ecoModeSwitchService, this.Name + accessoryName);
 
       this.ecoModeSwitchService.getCharacteristic(this.platform.Characteristic.On)
         .onSet(this.setEcoModeSwitchOnState.bind(this))
@@ -617,7 +628,7 @@ export class BigAssFans_i6PlatformAccessory {
     return isOn;
   }
 
-  // set/get won't get called unless showDimToWarmSwitch is true
+  // set/get won't be called unless showDimToWarmSwitch is true
   async setDimToWarmSwitchOnState(value: CharacteristicValue) {
     debugLog(this, 'characteristics', 3, 'Set Characteristic Dim to Warm Switch On -> ' + value);
     this.dimToWarmSwitchOn = value as boolean;
@@ -630,7 +641,7 @@ export class BigAssFans_i6PlatformAccessory {
     return isOn;
   }
 
-  // set/get won't get called unless showFanAutoSwitch is true
+  // set/get won't be called unless showFanAutoSwitch is true
   async setFanAutoSwitchOnState(value: CharacteristicValue) {
     debugLog(this, 'characteristics', 3, 'Set Characteristic Fan Auto Switch On -> ' + value);
     this.fanAutoSwitchOn = value as boolean;
@@ -648,7 +659,7 @@ export class BigAssFans_i6PlatformAccessory {
     return isOn;
   }
 
-  // set/get won't get called unless showLightAutoSwitch is true
+  // set/get won't be called unless showLightAutoSwitch is true
   async setLightAutoSwitchOnState(value: CharacteristicValue) {
     debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Light Auto Switch On -> ' + value);
     this.lightAutoSwitchOn = value as boolean;
@@ -666,7 +677,7 @@ export class BigAssFans_i6PlatformAccessory {
     return isOn;
   }
 
-  // set/get won't get called unless showEcoModeSwitch is true
+  // set/get won't be called unless showEcoModeSwitch is true
   async setEcoModeSwitchOnState(value: CharacteristicValue) {
     debugLog(this, 'characteristics', 3, 'Set Characteristic Eco Mode Switch On -> ' + value);
     this.ecoModeSwitchOn = value as boolean;
@@ -676,6 +687,19 @@ export class BigAssFans_i6PlatformAccessory {
   async getEcoModeSwitchOnState(): Promise<CharacteristicValue> {
     const isOn = this.ecoModeSwitchOn;
     debugLog(this, 'characteristics', 3, 'Get Characteristic Eco Mode Switch On -> ' + isOn);
+    return isOn;
+  }
+
+  // set/get won't be called unless UV-C is detected
+  async setUVCSwitchOnState(value: CharacteristicValue) {
+    debugLog(this, 'characteristics', 3, 'Set Characteristic UVC Switch On -> ' + value);
+    this.UVCSwitchOn = value as boolean;
+    clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xe0, 0x0a, (this.UVCSwitchOn ? 0x01 : 0x0), 0xc0])), this);
+  }
+
+  async getUVCSwitchOnState(): Promise<CharacteristicValue> {
+    const isOn = this.UVCSwitchOn;
+    debugLog(this, ['newcode', 'characteristics'], [1, 3], 'Get Characteristic UVC Switch On -> ' + isOn);
     return isOn;
   }
 }
@@ -835,7 +859,7 @@ function onData(pA: BAF, data: Buffer) {
     debugLog(pA, 'network', 11, 'raw (unstuffed) chunks[' + i + ']: ' + hexFormat(unstuff(chunks[i])));
 
     const funStack: funCall[] = buildFunStack(unstuff(chunks[i]), pA);
-    debugLog(pA, 'funstack', 1, `funstack.length: ${funStack.length}`);
+    debugLog(pA, 'funstack', (funStack.length === 0) ? 2 : 1, `funstack.length: ${funStack.length}`);
     funStack.forEach((value) => {
       debugLog(pA, 'funstack', 1, `  ${value[0].name}(${value[1]})`);
       value[0](value[1], pA);
@@ -852,17 +876,51 @@ function sortFunction(a, b) {
   }
 }
 
+function setName(pA: BAF, service: Service, name: string) {
+  service.setCharacteristic(pA.platform.Characteristic.Name, name);
+
+  if (!service.testCharacteristic(pA.platform.Characteristic.ConfiguredName)) {
+    service.addCharacteristic(pA.platform.Characteristic.ConfiguredName);
+  }
+  service.setCharacteristic(pA.platform.Characteristic.ConfiguredName, name);
+}
+
 /**
 * property handler functions
 */
+
+function UVCPresent(s: string, pA: BAF) {
+  const value = Number(s);
+  if (value) {
+    if (pA.UVCSwitchService === undefined) {
+      if (pA.accessory.getService('UVCSwitch') === undefined) {
+        debugLog(pA, 'newcode', 1, 'add service: \'UVCSwitch\', \'switch-6\'');
+      } else {
+        debugLog(pA, 'newcode', 1, 'use service: \'UVCSwitch\'');
+      }
+
+      pA.UVCSwitchService = pA.accessory.getService('UVCSwitch') ||
+        pA.accessory.addService(pA.platform.Service.Switch, 'UVCSwitch', 'switch-6');
+      setName(pA, pA.UVCSwitchService, pA.Name + ' UVC');
+
+      pA.UVCSwitchService.getCharacteristic(pA.platform.Characteristic.On)
+        .onSet(pA.setUVCSwitchOnState.bind(pA))
+        .onGet(pA.getUVCSwitchOnState.bind(pA));
+    } else {
+      debugLog(pA, 'newcode', 1, 'UVCPresent() pA.UVCSwitchService !== undefined');
+    }
+  } else {
+    debugLog(pA, 'redflag', 1, `UVCPresent called wiith value: ${value}`);
+  }
+}
 
 function bulbsPresent(pA:BAF, downlightPresent:boolean, uplightPresent:boolean) {
   pA.bulbCount = 0;
 
   if (downlightPresent) {
     pA.bulbCount++;
-    debugLog(pA, 'light', 1, 'downlight detected');
     infoLogOnce(pA, 'downlight detected');
+    debugLog(pA, 'light', 1, 'downlight detected');
   } else {
     infoLogOnce(pA, 'no downlight detected');
     debugLog(pA, 'light', 1, 'no downlight detected');
@@ -883,8 +941,9 @@ function bulbsPresent(pA:BAF, downlightPresent:boolean, uplightPresent:boolean) 
       debugLog(pA, 'light', 1, 'add service: \'uplight\'');
       pA.uplightBulbService = pA.accessory.addService(pA.platform.Service.Lightbulb, 'uplight', 'light-2');
       const capitalizeName = pA.Name[0] === pA.Name[0].toUpperCase();
-      debugLog(pA, 'light', 1, `uplight name is ${pA.Name + (capitalizeName ? ' Upight' : ' uplight')}`);
-      pA.uplightBulbService.setCharacteristic(pA.platform.Characteristic.Name, pA.Name + (capitalizeName ? ' Upight' : ' uplight'));
+      debugLog(pA, 'light', 1, `uplight name is ${pA.Name + (capitalizeName ? ' Uplight' : ' uplight')}`);
+      // pA.uplightBulbService.setCharacteristic(pA.platform.Characteristic.Name, pA.Name + (capitalizeName ? ' Uplight' : ' uplight'));
+      setName(pA, pA.uplightBulbService, pA.Name + (capitalizeName ? ' Uplight' : ' uplight'));
 
       pA.uplightBulbService.getCharacteristic(pA.platform.Characteristic.On)
         .onSet(pA.setUpLightOnState.bind(pA))
@@ -1063,17 +1122,32 @@ function targetedlightBrightness(value:number, lightBulbService:Service, states:
 
 function lightOnState(s: string, pA:BAF) {
   const value = Number(s);
-  switch (pA.targetBulb) {
-    case TARGETLIGHT_UP:
+
+  if (pA.bulbCount < 2) {
+    if (pA.uplightBulbService !== undefined) {
       targetedlightOnState(value, pA.uplightBulbService, pA.uplightStates, 'Up', pA);
-      break;
-    case TARGETLIGHT_DOWN:
+    } else if (pA.downlightBulbService !== undefined) {
       targetedlightOnState(value, pA.downlightBulbService, pA.downlightStates, 'Down', pA);
-      break;
-    case TARGETLIGHT_BOTH:
-      targetedlightOnState(value, pA.uplightBulbService, pA.uplightStates, 'Up', pA);
-      targetedlightOnState(value, pA.downlightBulbService, pA.downlightStates, 'Down', pA);
-      break;
+    } else {
+      debugLog(pA, 'redflag', 1, `lightOnState() bulbCount: ${pA.bulbCount}, and no "up" or "down" bulbService`);
+    }
+  } else {
+    switch (pA.targetBulb) {
+      case TARGETLIGHT_UP:
+        targetedlightOnState(value, pA.uplightBulbService, pA.uplightStates, 'Up', pA);
+        break;
+      case TARGETLIGHT_DOWN:
+        targetedlightOnState(value, pA.downlightBulbService, pA.downlightStates, 'Down', pA);
+        break;
+      case TARGETLIGHT_BOTH:
+        targetedlightOnState(value, pA.uplightBulbService, pA.uplightStates, 'Up', pA);
+        targetedlightOnState(value, pA.downlightBulbService, pA.downlightStates, 'Down', pA);
+        break;
+
+      default:
+        debugLog(pA, 'redflag', 1, `lightOnState() unknown targetBulb value: ${pA.targetBulb}`);
+        break;
+    }
   }
 }
 function targetedlightOnState(value:number, service:Service, states:lightStates, description:string, pA:BAF) {
@@ -1235,6 +1309,21 @@ function ecoModeOnState(s: string, pA:BAF) {
     pA.ecoModeSwitchOn = onValue;
     debugLog(pA, 'characteristics', 3, 'update Eco Mode:' + pA.ecoModeSwitchOn);
     pA.ecoModeSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.ecoModeSwitchOn);
+  }
+}
+
+function UVCOnState(s: string, pA:BAF) {
+  const value = Number(s);
+  const onValue = (value === 0 ? false : true);
+  pA.UVCSwitchOn = onValue; // we do this even if there's no UVCSwitchService yet, so we can initialize it if/when it's created
+
+  debugLog(pA, 'newcode', 1, `UVCOnState() onValue: ${onValue}`);
+
+  if (pA.UVCSwitchService) {
+    debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update UVC Mode:' + pA.UVCSwitchOn);
+    pA.UVCSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.UVCSwitchOn);
+  } else {
+    debugLog(pA, 'newcode', 1, `UVCOnState() pA.UVCSwitchService: ${pA.UVCSwitchService}`);
   }
 }
 
@@ -1543,6 +1632,10 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 // currentRelativeHumidity(v / 100, pA);
                 funStack.push([currentRelativeHumidity, String(v/100)]);
                 break;
+              case 172: // UV-C
+                [b, v] = getValue(b);
+                funStack.push([UVCOnState, String(v)]);
+                break;
 
               // unimplemented numbers
               case 66:  // occupancy detection (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
@@ -1599,7 +1692,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               case 83:
                 [b, s] = getString(b);
                 debugLog(pA, 'protoparse', 1, `        string: "${s}"`);
-                debugLog(pA, 'cluing', 6, 'field ' + field + ', mystery string: ' + s);
+                debugLog(pA, 'cluing', 6, `field ${field}, mystery string: "${s}"`);
                 break;
 
               // mystery numbers
@@ -1634,13 +1727,12 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               case 140:
               case 151:
               case 153:
-              case 172:
               case 173:
               case 174:
               case 175:
                 [b, v] = getValue(b);
-                debugLog(pA, 'cluing', 6, 'field ' + field + ', mystery number: ' + v);
                 debugLog(pA, 'protoparse', 1, '        value: ' + v);
+                debugLog(pA, 'cluing', 6, 'field ' + field + ', mystery number: ' + v);
                 break;
 
               case 124: { // WiFi messages
@@ -1717,15 +1809,26 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                     case 13:
                     case 14:
                       [b, v] = getValue(b);  // ignore
-                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
+                      debugLog(pA, 'protoparse', 1, `          value: ${v}`);
                       debugLog(pA, 'cluing', 6, `field 17, mystery field: ${field}, value: ${v}`);
                       break;
 
-                    case 2: // downlight
-                    case 4:
+                    case 2: // downlight?
+                      // this case was added to resolve issue #14 but it's not a great solution because some fans have shown to
+                      // send this message even when they don't have a downlight (issue #20).
+                      // since I don't have detailed logs from issue #14 to test changes, it's more practical to just special-case the es6
+                      // until someone without an es6 has the "false downlight" issue.
+                      if (pA.Model === 'es6') {
+                        [b, v] = getValue(b);
+                        debugLog(pA, 'newcode', 1, `ignoring field 17 message with subfield: "${field}", value: ${v} for es6 fans`);
+                        break;
+                      }
+                      /* falls through */
+
+                    case 4: // downlight!
                       [b, v] = getValue(b);
                       debugLog(pA, 'protoparse', 1, '          value: ' + v);
-                      debugLog(pA, 'cluing', 1, `downlight equipped per field ${field}`);
+                      debugLog(pA, ['cluing', 'newcode'], [1, 1], `downlight equipped per field ${field}`);
                       if (v === 1) {
                         hasDownlight = true;
                       } else {
@@ -1734,15 +1837,21 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                       break;
 
                     case 6: // uplight for es6 detected?
-                      debugLog(pA, 'cluing', 1, 'uplight equipped for es6?');
+                      debugLog(pA, ['cluing', 'newcode'], [1, 1], 'uplight equipped for es6?');
 
                       [b, v] = getValue(b);  // uplight equipped?
-                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
+                      debugLog(pA, 'protoparse', 1, `          value: ${v}`);
                       if (v === 1) {
                         hasUplight = true;
                       } else {
                         debugLog(pA, 'redflags', 1, 'unexpected uplight presence value: ' + v);
                       }
+                      break;
+
+                    case 12: // UV-C? - issue #20/aveach/Living Room Fan (es6 [3.1.1])
+                      [b, v] = getValue(b);
+                      funStack.push([UVCPresent, String(v)]);
+                      debugLog(pA, 'newcode', 1, `field: 17, subfield "${field}", value: ${v}`);
                       break;
 
                     default:
