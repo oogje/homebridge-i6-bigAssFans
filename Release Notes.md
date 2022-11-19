@@ -1,6 +1,6 @@
 ## Release Notes
 
-### v0.5.4-beta2
+### v0.5.4-beta3
 Addresses Issue #20
 >ignore message with field 17 sub-field 2 issued by an es6 fan.
 
@@ -9,6 +9,10 @@ Addresses Issue #20
 set ConfiguredName to appease iOS/iPadOs 16.
 
 if there aren't two lights, ignore targetBulb and use whichever bulbService is present.
+
+### v0.5.4-beta2
+
+This space intentionally left blank (because I removed it).
 
 ### v0.5.4-beta1
 Deal with Issue #19.

@@ -80,6 +80,7 @@ export class BigAssFans_i6PlatformAccessory {
   public UVCSwitchOn = false;
   public disableDirectionControl = false;
   public enableDebugPort = false;
+  public simulated = false; // for future use
 
   public showTemperature = true;
 
