@@ -794,11 +794,6 @@ function networkSetup(pA: BAF) {
       c.on('end', () => {
         hbLog.info(`${pA.Name} - debug client disconnected`);
       });
-      // const debugTypes = Object.keys(pA.debugLevels).map(key => hbLog.info(pA.debugLevels[key]));
-      // console.log(Object.keys(pA.debugLevels));
-
-      // console.info(debugTypes);
-
       c.write(`${pA.Name}\n`);
 
       c.on('data', (data: Buffer) => {
@@ -814,10 +809,9 @@ function networkSetup(pA: BAF) {
             pA.debugLevels[a[0]] = Number(a[1]);
             c.write(`${a[0]} set to ${Number(a[1])}\n`);
           } else {
-            c.write(`"${a[0]}" is not a valid category\n`);
+            c.write(`"${a[0]}" is not valid\n`);
           }
         }
-        // console.log(s);
       });
     });
 
@@ -882,6 +876,8 @@ function sortFunction(a, b) {
   }
 }
 
+// As of iOS/iPadOS 16, Home app uses ConfiguredName if present, else the generic accessory name (i.e. Light)
+// https://discord.com/channels/432663330281226270/432672072859385856/1040394094528188416
 function setName(pA: BAF, service: Service, name: string) {
   service.setCharacteristic(pA.platform.Characteristic.Name, name);
 
