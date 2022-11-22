@@ -172,7 +172,9 @@ Perhaps try running the most recent beta shown in the list of [npm versions](htt
 
 [@bdraco](https://github.com/bdraco) for suggesting BAF is using protobufs and [@jfroy](https://github.com/jfroy) for building a working BAF controller using protobufs.
 
-@pponce, without whom there would be no Haiku implementation and a lot less testing, and for generally being an awesome collaborator.
+[@pponce](https://github.com/pponce), without whom there would be no Haiku implementation and a lot less testing, and for generally being an awesome collaborator and for the Haiku photo.
+
+All the users who reported issues and helped debug them, including [@aveach](https://github.com/aveach) who also made the es6 photo.
 
 [homebridge-miot](https://github.com/merdok/homebridge-miot) - whose style served as a guide.
 
