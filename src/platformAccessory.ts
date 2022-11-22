@@ -202,7 +202,7 @@ export class BigAssFans_i6PlatformAccessory {
     * set accessory information
     */
 
-    // I've forgotten the point of specifying a model name in the config file (unless it's devModelOverride) put
+    // I've forgotten the point of specifying a model name in the config file (unless it's devModelOverride) but
     // am not ready to delete this code yet.
     if (this.accessory.context.device.fanModel !== undefined && this.accessory.context.device.fanModel !== 'other') {
       this.Model = this.accessory.context.device.fanModel;
@@ -243,7 +243,7 @@ export class BigAssFans_i6PlatformAccessory {
     // Downlight Bulb
     // We assume the downlight is present and we'll delete it later if we find out there isn't one.
 
-    // a bunch of gynmastics here to deal with Issue #17
+    // a bunch of gynmastics here to deal with Issue #17,
     const pre052beta3lightBulbService = this.accessory.getService(this.platform.Service.Lightbulb);
     const post052beta3lightBulbService = this.accessory.getService('downlight');
     if (pre052beta3lightBulbService && post052beta3lightBulbService) {
@@ -447,6 +447,8 @@ export class BigAssFans_i6PlatformAccessory {
 
     if (this.bulbCount === 2) {
       clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_UP, 0xc0])), this);
+    } else if (this.Model === 'es6')  { // es6 with one light - temporary(!?) hack to debug issue #20
+      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, this.targetBulb, 0xc0])), this);
     }
 
     if (this.uplightStates.On && (value as boolean)) {
@@ -468,6 +470,9 @@ export class BigAssFans_i6PlatformAccessory {
 
     if (this.bulbCount === 2) {
       clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_UP, 0xc0])), this);
+    }
+    if (this.Model === 'es6')  { // temporary(!?) hack to debug issue #20
+      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, this.targetBulb, 0xc0])), this);
     }
 
     if (value === 0) {
@@ -925,7 +930,14 @@ function bulbsPresent(pA:BAF, downlightPresent:boolean, uplightPresent:boolean) 
   } else {
     infoLogOnce(pA, 'no downlight detected');
     debugLog(pA, 'light', 1, 'no downlight detected');
-    const service = pA.accessory.getService('downlight');
+
+    let service = pA.accessory.getService(pA.platform.Service.Lightbulb);
+    if (service) {
+      debugLog(pA, 'light', 1, 'remove platform.Service.Lightbulb');
+      pA.accessory.removeService(service);
+    }
+
+    service = pA.accessory.getService('downlight');
     if (service) {
       debugLog(pA, 'light', 1, 'remove service: \'downlight\'');
       pA.accessory.removeService(service);
@@ -1041,12 +1053,13 @@ function firmwareVersion(value:string, pA: BAF) {
 }
 
 function setTargetBulb(s: string, pA:BAF) {
-  if (pA.Model !== MODEL_HAIKU_L) {
+  if (pA.Model === MODEL_HAIKU_L) { // Haiku L Series only can only have one light
+    pA.targetBulb = TARGETLIGHT_DOWN;
+  } else {
     const value = Number(s);
     debugLog(pA, ['newcode', 'light'], [1, 1], 'setTargetBulb: ' + value);
     pA.targetBulb = value;
-  } else {
-    pA.targetBulb = TARGETLIGHT_DOWN;
+
   }
 }
 
@@ -1837,8 +1850,8 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                       }
                       break;
 
-                    case 6: // uplight for es6 detected?
-                      debugLog(pA, ['cluing', 'newcode'], [1, 1], 'uplight equipped for es6?');
+                    case 6: // uplight detected
+                      debugLog(pA, ['cluing', 'newcode'], [1, 1], 'uplight equipped');
 
                       [b, v] = getValue(b);  // uplight equipped?
                       debugLog(pA, 'protoparse', 1, `          value: ${v}`);
