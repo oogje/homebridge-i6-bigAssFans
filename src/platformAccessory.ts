@@ -79,6 +79,7 @@ export class BigAssFans_i6PlatformAccessory {
   public ecoModeSwitchOn = false;
   public UVCSwitchOn = false;
   public disableDirectionControl = false;
+  public noLights = false;
   public enableDebugPort = false;
   public simulated = false; // for future use
 
@@ -141,6 +142,10 @@ export class BigAssFans_i6PlatformAccessory {
         const entry:(string | number)[] = debugEntry as (string | number)[];
         this.debugLevels[entry[0]] = entry[1];
       }
+    }
+
+    if (accessory.context.device.noLights) {
+      this.noLights = true;  // defaults to false in property initialization
     }
 
     if (accessory.context.device.whoosh) {
@@ -242,33 +247,49 @@ export class BigAssFans_i6PlatformAccessory {
 
     // Downlight Bulb
     // We assume the downlight is present and we'll delete it later if we find out there isn't one.
+    // Except we won't create it if it's not wanted (noLights)
 
-    // a bunch of gynmastics here to deal with Issue #17,
     const pre052beta3lightBulbService = this.accessory.getService(this.platform.Service.Lightbulb);
     const post052beta3lightBulbService = this.accessory.getService('downlight');
+    // deal with Issue #17,
     if (pre052beta3lightBulbService && post052beta3lightBulbService) {
       this.accessory.removeService(post052beta3lightBulbService);
     }
 
-    // then down to business
-    this.downlightBulbService = this.accessory.getService(this.platform.Service.Lightbulb) ||
-      this.accessory.getService('downlight') ||
-      this.accessory.addService(this.platform.Service.Lightbulb, 'downlight', 'light-1');
-    accessoryName = capitalizeName ? ' Light' : ' light';
-    // this.downlightBulbService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
-    setName(this, this.downlightBulbService, this.Name + accessoryName);
+    if (this.noLights) {
+      hbLog.info(this.Name + ' lights disabled by configuration');
+      // so the user doesn't have to clear cache
+      if (pre052beta3lightBulbService) {
+        this.accessory.removeService(pre052beta3lightBulbService);
+      }
+      if (post052beta3lightBulbService) {
+        this.accessory.removeService(post052beta3lightBulbService);
+      }
+      const service = this.accessory.getService('uplight');
+      if (service) {
+        this.accessory.removeService(service);
+      }
+    } else {
+      // down to business
+      this.downlightBulbService = this.accessory.getService(this.platform.Service.Lightbulb) ||
+        this.accessory.getService('downlight') ||
+        this.accessory.addService(this.platform.Service.Lightbulb, 'downlight', 'light-1');
+      accessoryName = capitalizeName ? ' Light' : ' light';
+      // this.downlightBulbService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+      setName(this, this.downlightBulbService, this.Name + accessoryName);
 
-    this.downlightBulbService.getCharacteristic(this.platform.Characteristic.On)
-      .onSet(this.setDownLightOnState.bind(this))
-      .onGet(this.getDownLightOnState.bind(this));
+      this.downlightBulbService.getCharacteristic(this.platform.Characteristic.On)
+        .onSet(this.setDownLightOnState.bind(this))
+        .onGet(this.getDownLightOnState.bind(this));
 
-    this.downlightBulbService.getCharacteristic(this.platform.Characteristic.Brightness)
-      .onSet(this.setDownBrightness.bind(this))
-      .onGet(this.getDownBrightness.bind(this));
+      this.downlightBulbService.getCharacteristic(this.platform.Characteristic.Brightness)
+        .onSet(this.setDownBrightness.bind(this))
+        .onGet(this.getDownBrightness.bind(this));
 
-    this.downlightBulbService.getCharacteristic(this.platform.Characteristic.ColorTemperature)
-      .onSet(this.setDownColorTemperature.bind(this))
-      .onGet(this.getDownColorTemperature.bind(this));
+      this.downlightBulbService.getCharacteristic(this.platform.Characteristic.ColorTemperature)
+        .onSet(this.setDownColorTemperature.bind(this))
+        .onGet(this.getDownColorTemperature.bind(this));
+    }
 
     // Current Temperature
     if (this.accessory.context.device.showTemperature === undefined || this.accessory.context.device.showTemperature !== false) {
@@ -719,11 +740,11 @@ function networkSetup(pA: BAF) {
 
   if (pA.ProbeFrequency !== 0) {
     // attempt to prevent the occassional socket reset.
-    // sending the mysterious code that the vendor app seems to send once every 15s but I'll go with every minute -  didn't prevent it.
-    // can try going to every 15 seconds like the vendor app seems to do. - didn't work
-    // perhaps I need to call socket.setKeepAlive([enable][, initialDelay]) when I establish it above? - nope, didn't help
+    // sending the mysterious code that the vendor app seems to send once every 15s but instead sending every minute didn't prevent it.
+    // sending every 15 seconds didn't help.
+    // calling socket.setKeepAlive([enable][, initialDelay]) when I establish it above didn't help.
     // obviously, I don't understand this stuff.
-    // now I got an EPIPE 5+ hours after a reset, and repeaated EPIPEs evert minute for the next 7 minutes, then one more after 4 minutes
+    // once I got an EPIPE 5+ hours after a reset, and repeaated EPIPEs every minute for the next 7 minutes, then one more after 4 minutes
     // then clear sailing for 1+ hours so far.
     pA.probeTimeout = setInterval(( )=> {
       if (pA.client !== undefined) {
@@ -742,32 +763,67 @@ function networkSetup(pA: BAF) {
   });
 
   let errHandler;
+  let backOffSecs = 2;
 
   pA.client.on('error', errHandler = (err) => {
-    let retryMillisconds = 2000;
-    if (err.code === 'ECONNRESET') {
-      hbLog.warn(pA.Name + ' (' + pA.IP + ')' + ' network connection reset [ECONNRESET].  Attempting reconnect in 2 seconds.');
-    } else if (err.code === 'EPIPE') {
-      hbLog.warn(pA.Name + ' (' + pA.IP + ')' + ' network connection broke [EPIPE].  Attempting reconnect in 2 seconds.');
-    } else if (err.code === 'ETIMEDOUT') {
-      hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' connection timed out [ETIMEDOUT].  '  +
-        'Check that your fan has power and the correct IP is in json.config.');
-      return;
-    } else if (err.code === 'ECONNREFUSED') {
-      hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' connection refused [ECONNREFUSED].  Check that the correct IP is in json.config.');
-      if (pA.probeTimeout !== undefined) {
-        clearInterval(pA.probeTimeout);
-      }
-      return;
-    } else if (err.code === 'ENETUNREACH') {
-      hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' is unreachable [ENETUNREACH].  Check the correct IP is in json.config.');
-      return;
-    } else if (err.code === 'EHOSTDOWN') {
-      hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' connection problem [EHOSTDOWN].  Attempting reconnect in one minute.');
-      retryMillisconds = 60000;
-    } else {
-      hbLog.warn(pA.Name + ' (' + pA.IP + ')' + ': Unhandled network error: ' + err.code + '.  Attempting reconnect in 2 seconds.');
+    debugLog(pA, 'newcode', 1, err.message);
+
+    let retryMillisconds = 1000 * backOffSecs;
+    switch (err.code) {
+      case 'ETIMEDOUT':
+        hbLog.error(`${pA.Name} (${pA.IP}) connection timed out ${err.code}.  Check your fan has power and the correct IP in json.config.`);
+        return;
+      case 'ECONNREFUSED':
+        hbLog.error(`${pA.Name} (${pA.IP}) connection refused ${err.code}.  Check that the correct IP is in json.config.`);
+        // why clearInterval here but not in the other cases that return
+        if (pA.probeTimeout !== undefined) {
+          clearInterval(pA.probeTimeout);
+        }
+        return;
+      case 'ENETUNREACH':
+        hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' is unreachable [ENETUNREACH].  Check the correct IP is in json.config.');
+        return;
+
+      case 'EHOSTDOWN':
+        hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' connection problem [EHOSTDOWN].  Attempting reconnect in one minute.');
+        retryMillisconds = 60000;
+        break;
+      case 'ECONNRESET':
+        hbLog.warn(`${pA.Name} (${pA.IP}) network connection reset ${err.code}.  Attempting reconnect in ${backOffSecs} seconds.`);
+        break;
+      case 'EPIPE':
+        hbLog.warn(`${pA.Name} (${pA.IP}) network connection broke ${err.code}.  Attempting reconnect in ${backOffSecs} seconds.`);
+        break;
+
+      default:
+        hbLog.warn(`${pA.Name} (${pA.IP}) : Unhandled network error: ${err.code}.  Attempting reconnect in ${backOffSecs} seconds.`);
+        break;
     }
+
+    // if (err.code === 'ECONNRESET') {
+    //   hbLog.warn(`${pA.Name} (${pA.IP}) network connection reset ${err.code}.  Attempting reconnect in ${backOffSecs} seconds.`);
+    // } else if (err.code === 'EPIPE') {
+    //   hbLog.warn(pA.Name + ' (' + pA.IP + ')' + ' network connection broke [EPIPE].  Attempting reconnect in 2 seconds.');
+    // } else if (err.code === 'ETIMEDOUT') {
+    //   hbLog.error(`${pA.Name} (${pA.IP}) connection timed out [ETIMEDOUT]. Check your fan has power and the correct IP in json.config.`);
+    //   return;
+    // } else if (err.code === 'ECONNREFUSED') {
+    //   hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' connection refused [ECONNREFUSED].  Check that the correct IP is in json.config.');
+    //   if (pA.probeTimeout !== undefined) {
+    //     clearInterval(pA.probeTimeout);
+    //   }
+    //   return;
+    // } else if (err.code === 'ENETUNREACH') {
+    //   hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' is unreachable [ENETUNREACH].  Check the correct IP is in json.config.');
+    //   return;
+    // } else if (err.code === 'EHOSTDOWN') {
+    //   hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' connection problem [EHOSTDOWN].  Attempting reconnect in one minute.');
+    //   retryMillisconds = 60000;
+    // } else {
+    //   hbLog.warn(pA.Name + ' (' + pA.IP + ')' + ': Unhandled network error: ' + err.code + '.  Attempting reconnect in 2 seconds.');
+    // }
+
+    backOffSecs = backOffSecs * 2;
     pA.client = undefined;
     setTimeout(() => {
       // already did this one or more times, don't need to send initilization message
@@ -892,6 +948,9 @@ function setName(pA: BAF, service: Service, name: string) {
 */
 
 function UVCPresent(s: string, pA: BAF) {
+  if (pA.noLights) {
+    return;
+  }
   const value = Number(s);
   if (value) {
     if (pA.UVCSwitchService === undefined) {
@@ -977,6 +1036,10 @@ function bulbsPresent(pA:BAF, downlightPresent:boolean, uplightPresent:boolean) 
   }
 }
 function bulbsPresent2(s: string, pA: BAF) {
+  if (pA.noLights) {
+    return;
+  }
+
   const a=s.split(',');
   if (pA.Model !== MODEL_HAIKU_L) {
     bulbsPresent(pA, a[0]==='true', a[1]==='true');
@@ -1049,6 +1112,10 @@ function firmwareVersion(value:string, pA: BAF) {
 }
 
 function setTargetBulb(s: string, pA:BAF) {
+  if (pA.noLights) {
+    return;
+  }
+
   if (pA.Model === MODEL_HAIKU_L) { // Haiku L Series only can only have one light
     pA.targetBulb = TARGETLIGHT_DOWN;
   } else {
@@ -1060,6 +1127,10 @@ function setTargetBulb(s: string, pA:BAF) {
 }
 
 function lightColorTemperature(s: string, pA:BAF) {
+  if (pA.noLights) {
+    return;
+  }
+
   const value = Number(s);
   switch (pA.targetBulb) {
     case TARGETLIGHT_UP:
@@ -1091,6 +1162,10 @@ function targetedColorTemperature(value:number, service:Service, states:lightSta
 }
 
 function lightBrightness(s: string, pA:BAF) {
+  if (pA.noLights) {
+    return;
+  }
+
   const value = Number(s);
   switch (pA.targetBulb) {
     case TARGETLIGHT_UP:
@@ -1131,6 +1206,10 @@ function targetedlightBrightness(value:number, lightBulbService:Service, states:
 }
 
 function lightOnState(s: string, pA:BAF) {
+  if (pA.noLights) {
+    return;
+  }
+
   const value = Number(s);
 
   if (pA.bulbCount < 2) {
@@ -1323,6 +1402,10 @@ function ecoModeOnState(s: string, pA:BAF) {
 }
 
 function UVCOnState(s: string, pA:BAF) {
+  if (pA.noLights) {
+    return;
+  }
+
   const value = Number(s);
   const onValue = (value === 0 ? false : true);
   pA.UVCSwitchOn = onValue; // we do this even if there's no UVCSwitchService yet, so we can initialize it if/when it's created
@@ -1651,6 +1734,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               case 66:  // occupancy detection (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
               case 85:  // light_occupancy_detected (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
                 [b, v] = getValue(b); // ignore for now
+                debugLog(pA, 'newcode', 1, `occupancy detected per field: ${field}`);
                 break;
 
 

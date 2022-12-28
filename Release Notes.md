@@ -1,5 +1,10 @@
 ## Release Notes
 
+### v0.5.4-beta5
+implement `"noLight"` configuration attribute
+
+in the midst of implementing some sort of error retry backoff mechanism
+
 ### v0.5.4-beta4
 Same as v0.5.4-beta3 with fix to remove zombie downlight and hack to send targetBulb for es6 with one light
 
