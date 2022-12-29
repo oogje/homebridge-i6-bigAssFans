@@ -1,5 +1,8 @@
 ## Release Notes
 
+### v0.5.4-beta6
+fix for beta5 insta-crash with Haiku
+
 ### v0.5.4-beta5
 implement `"noLight"` configuration attribute
 

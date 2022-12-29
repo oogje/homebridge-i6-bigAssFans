@@ -1073,25 +1073,29 @@ function productType(value:string, pA:BAF) {
       .setCharacteristic(pA.platform.Characteristic.Model, pA.Model);
 
     if (pA.Model === MODEL_HAIKU_HI || pA.Model === MODEL_HAIKU_L) {
-      // this.lightBulbService.getCharacteristic(this.platform.Characteristic.ColorTemperature)
-      //   .removeAllListeners('set')
-      //   .removeAllListeners('get');
-      pA.downlightBulbService.removeCharacteristic(pA.downlightBulbService.getCharacteristic(pA.platform.Characteristic.ColorTemperature));
-    }
-
-    if (pA.Model === MODEL_HAIKU_HI || pA.Model === MODEL_HAIKU_L) {
       const service = pA.accessory.getService(pA.platform.Service.HumiditySensor);
       if (service) {
         pA.accessory.removeService(service);
       }
     }
 
-    // Am hoping Model gets set before we ignorantly try to add an uplight.  Otherwise we might need to remove an uplight bulb service.
     if (pA.Model === MODEL_HAIKU_L) {
       const service = pA.accessory.getService(pA.platform.Service.TemperatureSensor);
       if (service) {
         pA.accessory.removeService(service);
       }
+    }
+
+
+    if (pA.noLights) {
+      return;
+    }
+
+    if (pA.Model === MODEL_HAIKU_HI || pA.Model === MODEL_HAIKU_L) {
+      // this.lightBulbService.getCharacteristic(this.platform.Characteristic.ColorTemperature)
+      //   .removeAllListeners('set')
+      //   .removeAllListeners('get');
+      pA.downlightBulbService.removeCharacteristic(pA.downlightBulbService.getCharacteristic(pA.platform.Characteristic.ColorTemperature));
     }
   }
 }
