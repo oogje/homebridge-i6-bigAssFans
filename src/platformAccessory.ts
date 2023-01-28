@@ -726,7 +726,7 @@ export class BigAssFans_i6PlatformAccessory {
 
   async getUVCSwitchOnState(): Promise<CharacteristicValue> {
     const isOn = this.UVCSwitchOn;
-    debugLog(this, ['newcode', 'characteristics'], [1, 3], 'Get Characteristic UVC Switch On -> ' + isOn);
+    debugLog(this, ['newcode', 'characteristics'], [2, 3], 'Get Characteristic UVC Switch On -> ' + isOn);
     return isOn;
   }
 }
@@ -764,6 +764,7 @@ function networkSetup(pA: BAF) {
 
   let errHandler;
   let backOffSecs = 2;
+  const maxBackOffSecs = 3600;
 
   pA.client.on('error', errHandler = (err) => {
     debugLog(pA, 'newcode', 1, err.message);
@@ -824,10 +825,14 @@ function networkSetup(pA: BAF) {
     // }
 
     backOffSecs = backOffSecs * 2;
+    if (backOffSecs >= maxBackOffSecs) {
+      backOffSecs = maxBackOffSecs;
+    }
     pA.client = undefined;
     setTimeout(() => {
       // already did this one or more times, don't need to send initilization message
       pA.client = net.connect(31415, pA.IP, () => {
+        backOffSecs = 2;
         hbLog.info(pA.Name + ' reconnected!');
       });
       pA.client.on('error', (err) => {
@@ -955,9 +960,9 @@ function UVCPresent(s: string, pA: BAF) {
   if (value) {
     if (pA.UVCSwitchService === undefined) {
       if (pA.accessory.getService('UVCSwitch') === undefined) {
-        debugLog(pA, 'newcode', 1, 'add service: \'UVCSwitch\', \'switch-6\'');
+        debugLog(pA, 'newcode', 2, 'add service: \'UVCSwitch\', \'switch-6\'');
       } else {
-        debugLog(pA, 'newcode', 1, 'use service: \'UVCSwitch\'');
+        debugLog(pA, 'newcode', 2, 'use service: \'UVCSwitch\'');
       }
 
       pA.UVCSwitchService = pA.accessory.getService('UVCSwitch') ||
@@ -968,7 +973,7 @@ function UVCPresent(s: string, pA: BAF) {
         .onSet(pA.setUVCSwitchOnState.bind(pA))
         .onGet(pA.getUVCSwitchOnState.bind(pA));
     } else {
-      debugLog(pA, 'newcode', 1, 'UVCPresent() pA.UVCSwitchService !== undefined');
+      debugLog(pA, 'newcode', 2, 'UVCPresent() pA.UVCSwitchService !== undefined');
     }
   } else {
     debugLog(pA, 'redflag', 1, `UVCPresent called wiith value: ${value}`);
@@ -1124,7 +1129,7 @@ function setTargetBulb(s: string, pA:BAF) {
     pA.targetBulb = TARGETLIGHT_DOWN;
   } else {
     const value = Number(s);
-    debugLog(pA, ['newcode', 'light'], [1, 1], 'setTargetBulb: ' + value);
+    debugLog(pA, ['newcode', 'light'], [2, 1], 'setTargetBulb: ' + value);
     pA.targetBulb = value;
 
   }
@@ -1414,13 +1419,13 @@ function UVCOnState(s: string, pA:BAF) {
   const onValue = (value === 0 ? false : true);
   pA.UVCSwitchOn = onValue; // we do this even if there's no UVCSwitchService yet, so we can initialize it if/when it's created
 
-  debugLog(pA, 'newcode', 1, `UVCOnState() onValue: ${onValue}`);
+  debugLog(pA, 'newcode', 2, `UVCOnState() onValue: ${onValue}`);
 
   if (pA.UVCSwitchService) {
-    debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update UVC Mode:' + pA.UVCSwitchOn);
+    debugLog(pA, ['newcode', 'characteristics'], [2, 3], 'update UVC Mode:' + pA.UVCSwitchOn);
     pA.UVCSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.UVCSwitchOn);
   } else {
-    debugLog(pA, 'newcode', 1, `UVCOnState() pA.UVCSwitchService: ${pA.UVCSwitchService}`);
+    debugLog(pA, 'newcode', 2, `UVCOnState() pA.UVCSwitchService: ${pA.UVCSwitchService}`);
   }
 }
 
@@ -1717,7 +1722,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 [b, v] = getValue(b);
                 // lightSelector(v, pA);
                 funStack.splice(0, 0, [setTargetBulb, String(v)]);
-                debugLog(pA, 'newcode', 1, 'inserted setTargetBulb at start of funStack');
+                debugLog(pA, 'newcode', 2, 'inserted setTargetBulb at start of funStack');
                 break;
               case 86:  // temperature
                 [b, v] = getValue(b);
@@ -1738,7 +1743,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               case 66:  // occupancy detection (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
               case 85:  // light_occupancy_detected (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
                 [b, v] = getValue(b); // ignore for now
-                debugLog(pA, 'newcode', 1, `occupancy detected per field: ${field}`);
+                debugLog(pA, 'newcode', 1, `occupancy: ${v} detected per field: ${field}`);
                 break;
 
 
@@ -1918,7 +1923,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                       // until someone without an es6 has the "false downlight" issue.
                       if (pA.Model === 'es6') {
                         [b, v] = getValue(b);
-                        debugLog(pA, 'newcode', 1, `ignoring field 17 message with subfield: "${field}", value: ${v} for es6 fans`);
+                        debugLog(pA, 'newcode', 2, `ignoring field 17 message with subfield: "${field}", value: ${v} for es6 fans`);
                         break;
                       }
                       /* falls through */
@@ -1926,7 +1931,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                     case 4: // downlight!
                       [b, v] = getValue(b);
                       debugLog(pA, 'protoparse', 1, '          value: ' + v);
-                      debugLog(pA, ['cluing', 'newcode'], [1, 1], `downlight equipped per field ${field}`);
+                      debugLog(pA, ['cluing', 'newcode'], [1, 2], `downlight equipped per field ${field}`);
                       if (v === 1) {
                         hasDownlight = true;
                       } else {
@@ -1935,7 +1940,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                       break;
 
                     case 6: // uplight detected
-                      debugLog(pA, ['cluing', 'newcode'], [1, 1], 'uplight equipped');
+                      debugLog(pA, ['cluing', 'newcode'], [1, 2], 'uplight equipped');
 
                       [b, v] = getValue(b);  // uplight equipped?
                       debugLog(pA, 'protoparse', 1, `          value: ${v}`);
@@ -1949,7 +1954,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                     case 12: // UV-C? - issue #20/aveach/Living Room Fan (es6 [3.1.1])
                       [b, v] = getValue(b);
                       funStack.push([UVCPresent, String(v)]);
-                      debugLog(pA, 'newcode', 1, `field: 17, subfield "${field}", value: ${v}`);
+                      debugLog(pA, 'newcode', 2, `field: 17, subfield "${field}", value: ${v}`);
                       break;
 
                     default:
