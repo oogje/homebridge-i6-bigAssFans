@@ -44,6 +44,8 @@ export class BigAssFans_i6PlatformAccessory {
   public lightAutoSwitchService!: Service;
   public ecoModeSwitchService!: Service;
   public UVCSwitchService!: Service;
+  public fanOccupancySensorService!: Service;
+  public lightOccupancySensorService!: Service;
 
   public downlightStates: lightStates = {
     On: false,
@@ -67,6 +69,9 @@ export class BigAssFans_i6PlatformAccessory {
     // fanAutoHackInProgress: false,
   };
 
+  public fanOccupancyDetected = false;
+  public lightOccupancyDetected = false;
+
   public showWhooshSwitch = false;
   public whooshSwitchOn = false;
   public showDimToWarmSwitch = false;
@@ -80,6 +85,9 @@ export class BigAssFans_i6PlatformAccessory {
   public UVCSwitchOn = false;
   public disableDirectionControl = false;
   public noLights = false;
+  public showFanOccupancySensor = false;
+  public showLightOccupancySensor = false;
+
   public enableDebugPort = false;
   public simulated = false; // for future use
 
@@ -197,6 +205,17 @@ export class BigAssFans_i6PlatformAccessory {
 
     if (accessory.context.device.disableDirectionControl) {
       this.disableDirectionControl = true;
+    }
+
+    if (accessory.context.device.showFanOccupancySensor) {
+      debugLog(this, 'newcode', 1, `accessory.context.device.showFanOccupancySensor is ${accessory.context.device.showFanOccupancySensor}`);
+      this.showFanOccupancySensor = true;
+    }
+
+    if (accessory.context.device.showLightOccupancySensor) {
+      debugLog(this, 'newcode', 1,
+        `accessory.context.device.showLightOccupancySensor is ${accessory.context.device.showLightOccupancySensor}`);
+      this.showLightOccupancySensor = true;
     }
 
     if (accessory.context.device.enableDebugPort) {
@@ -395,6 +414,36 @@ export class BigAssFans_i6PlatformAccessory {
         .onGet(this.getEcoModeSwitchOnState.bind(this));
     } else {
       const service = this.accessory.getService('ecoModeSwitch');
+      if (service) {
+        this.accessory.removeService(service);
+      }
+    }
+
+    if (this.showFanOccupancySensor) {
+      this.fanOccupancySensorService = this.accessory.getService('fanOccupancySensor') ||
+        this.accessory.addService(this.platform.Service.OccupancySensor, 'fanOccupancySensor', 'occupancySensor-1');
+      accessoryName = capitalizeName ?  ' Occupancy' : ' fan occupancy';
+      setName(this, this.fanOccupancySensorService, this.Name + accessoryName);
+
+      this.fanOccupancySensorService.getCharacteristic(this.platform.Characteristic.OccupancyDetected)
+        .onGet(this.handleFanOccupancyDetectedGet.bind(this));
+    } else {
+      const service = this.accessory.getService('fanOccupancySensor');
+      if (service) {
+        this.accessory.removeService(service);
+      }
+    }
+
+    if (this.showLightOccupancySensor) {
+      this.lightOccupancySensorService = this.accessory.getService('lightOccupancySensor') ||
+        this.accessory.addService(this.platform.Service.OccupancySensor, 'lightOccupancySensor', 'occupancySensor-2');
+      accessoryName = capitalizeName ?  ' Light Occupancy' : ' light occupancy';
+      setName(this, this.lightOccupancySensorService, this.Name + accessoryName);
+
+      this.lightOccupancySensorService.getCharacteristic(this.platform.Characteristic.OccupancyDetected)
+        .onGet(this.handleLightOccupancyDetectedGet.bind(this));
+    } else {
+      const service = this.accessory.getService('lightOccupancySensor');
       if (service) {
         this.accessory.removeService(service);
       }
@@ -715,6 +764,18 @@ export class BigAssFans_i6PlatformAccessory {
     const isOn = this.ecoModeSwitchOn;
     debugLog(this, 'characteristics', 3, 'Get Characteristic Eco Mode Switch On -> ' + isOn);
     return isOn;
+  }
+
+  async handleFanOccupancyDetectedGet(): Promise<CharacteristicValue> {
+    const occupancy = this.fanOccupancyDetected;
+    debugLog(this, ['newcode', 'characteristics'], [2, 3], 'Get Characteristic Fan Occupancy Detected -> ' + occupancy);
+    return occupancy;
+  }
+
+  async handleLightOccupancyDetectedGet(): Promise<CharacteristicValue> {
+    const occupancy = this.lightOccupancyDetected;
+    debugLog(this, ['newcode', 'characteristics'], [2, 3], 'Get Characteristic Light Occupancy Detected -> ' + occupancy);
+    return occupancy;
   }
 
   // set/get won't be called unless UV-C is detected
@@ -1429,6 +1490,27 @@ function UVCOnState(s: string, pA:BAF) {
   }
 }
 
+function fanOccupancyDetectedState(s: string, pA:BAF) {
+  const value = Number(s);
+  if (pA.showFanOccupancySensor) {
+    const occupancy = (value === 0 ? false : true);
+    pA.fanOccupancyDetected = occupancy;
+    debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update Fan Occupancy:' + pA.fanOccupancyDetected);
+    pA.fanOccupancySensorService.updateCharacteristic(pA.platform.Characteristic.OccupancyDetected, value);
+  }
+}
+
+function lightOccupancyDetectedState(s: string, pA:BAF) {
+  const value = Number(s);
+  if (pA.showLightOccupancySensor) {
+    const occupancy = (value === 0 ? false : true);
+    pA.lightOccupancyDetected = occupancy;
+    debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update Light Occupancy:' + pA.lightOccupancyDetected);
+    pA.lightOccupancySensorService.updateCharacteristic(pA.platform.Characteristic.OccupancyDetected, value);
+  }
+}
+
+
 // keeping track to gather clues in unending effort to ID unknown codes
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function mysteryCode(value: string, pA:BAF, code: string) {
@@ -1739,11 +1821,16 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 funStack.push([UVCOnState, String(v)]);
                 break;
 
-              // unimplemented numbers
-              case 66:  // occupancy detection (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+              case 66:  // fan_occupancy_detected (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+                [b, v] = getValue(b);
+                funStack.push([fanOccupancyDetectedState, String(v)]);
+                debugLog(pA, 'newcode', 1, `fan occupancy: ${v} detected per field: ${field}`);
+                break;
+
               case 85:  // light_occupancy_detected (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
-                [b, v] = getValue(b); // ignore for now
-                debugLog(pA, 'newcode', 1, `occupancy: ${v} detected per field: ${field}`);
+                [b, v] = getValue(b);
+                funStack.push([lightOccupancyDetectedState, String(v)]);
+                debugLog(pA, 'newcode', 1, `light occupancy: ${v} detected per field: ${field}`);
                 break;
 
 
