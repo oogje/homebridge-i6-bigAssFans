@@ -1,5 +1,8 @@
 ## Release Notes
 
+### v0.5.4-beta7
+capped re-connect backoff, improved log text, changed some log levels
+
 ### v0.5.4-beta6
 fix for beta5 insta-crash with Haiku
 
