@@ -151,6 +151,12 @@ Sets the frequency that probe messages are sent to the fan.  A frequency 0 milli
 * `showTemperture` [optional]
 Can be set to false if you don't want to see the temperature (defaults to true).
 
+### **Other**
+
+If you find you cannot change the fan icon in Apple's Home app and you are showing your fan with its lights and/or switches as a single tile, then show it as separate tiles.  That should unlock the icon so you can change it, then set it back to **Show as Single Tile** and the icon will be locked with your change in effect.
+
+In some cases the Home app doesn't have the option to **Show as Separate Tiles** or **Show as Single Tile** in the Fan's settings, e.g. a Haiku H/I with no light and no optional switches being shown.  In this case the work-around is to add `"showTemperature": false` to your  config.json for the fan, restart, then change the icon, then remove the `"showTemperature"` line or change the setting to `true`, and restart.
+
 ### **Troubleshooting**
 
 First, make sure you can control your fan from the official Big Ass Fans app.
