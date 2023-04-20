@@ -1,5 +1,9 @@
 ## Release Notes
 
+### v0.5.4-beta9
+humidity sensor can be disabled
+addresses problem with Issue #21's resolution  - name changes don't survive a restart
+
 ### v0.5.4-beta8
 added occupancy sensors
 

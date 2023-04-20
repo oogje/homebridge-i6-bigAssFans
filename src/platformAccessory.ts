@@ -91,6 +91,7 @@ export class BigAssFans_i6PlatformAccessory {
   public enableDebugPort = false;
   public simulated = false; // for future use
 
+  public showHumidity = true;
   public showTemperature = true;
 
   public IP: string;
@@ -208,13 +209,12 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     if (accessory.context.device.showFanOccupancySensor) {
-      debugLog(this, 'newcode', 1, `accessory.context.device.showFanOccupancySensor is ${accessory.context.device.showFanOccupancySensor}`);
       this.showFanOccupancySensor = true;
     }
 
     if (accessory.context.device.showLightOccupancySensor) {
-      debugLog(this, 'newcode', 1,
-        `accessory.context.device.showLightOccupancySensor is ${accessory.context.device.showLightOccupancySensor}`);
+      // debugLog(this, 'newcode', 1,
+      //   `accessory.context.device.showLightOccupancySensor is ${accessory.context.device.showLightOccupancySensor}`);
       this.showLightOccupancySensor = true;
     }
 
@@ -327,14 +327,21 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     // Current Relative Humidity
-    this.humiditySensorService = this.accessory.getService(this.platform.Service.HumiditySensor) ||
-      this.accessory.addService(this.platform.Service.HumiditySensor);
-    accessoryName = capitalizeName ?  ' Humidity' : ' humidity';
-    // this.humiditySensorService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
-    setName(this, this.humiditySensorService, this.Name + accessoryName);
+    if (this.accessory.context.device.showHumidity === undefined || this.accessory.context.device.showHumidity !== false) {
+      this.humiditySensorService = this.accessory.getService(this.platform.Service.HumiditySensor) ||
+        this.accessory.addService(this.platform.Service.HumiditySensor);
+      accessoryName = capitalizeName ?  ' Humidity' : ' humidity';
+      // this.humiditySensorService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
+      setName(this, this.humiditySensorService, this.Name + accessoryName);
 
-    this.humiditySensorService.getCharacteristic(this.platform.Characteristic.CurrentRelativeHumidity)
-      .onGet(this.getCurrentRelativeHumidity.bind(this));
+      this.humiditySensorService.getCharacteristic(this.platform.Characteristic.CurrentRelativeHumidity)
+        .onGet(this.getCurrentRelativeHumidity.bind(this));
+    } else {
+      const service = this.accessory.getService(this.platform.Service.HumiditySensor);
+      if (service) {
+        this.accessory.removeService(service);
+      }
+    }
 
     // Switches
     if (this.showWhooshSwitch) {
@@ -768,7 +775,7 @@ export class BigAssFans_i6PlatformAccessory {
 
   async handleFanOccupancyDetectedGet(): Promise<CharacteristicValue> {
     const occupancy = this.fanOccupancyDetected;
-    debugLog(this, ['newcode', 'characteristics'], [2, 3], 'Get Characteristic Fan Occupancy Detected -> ' + occupancy);
+    debugLog(this, 'characteristics', 3, 'Get Characteristic Fan Occupancy Detected -> ' + occupancy);
     return occupancy;
   }
 
@@ -1000,13 +1007,29 @@ function sortFunction(a, b) {
 
 // As of iOS/iPadOS 16, Home app uses ConfiguredName if present, else the generic accessory name (i.e. Light)
 // https://discord.com/channels/432663330281226270/432672072859385856/1040394094528188416
+// function setName(pA: BAF, service: Service, name: string) {
+//   service.setCharacteristic(pA.platform.Characteristic.Name, name);
+
+//   if (!service.testCharacteristic(pA.platform.Characteristic.ConfiguredName)) {
+//     service.addCharacteristic(pA.platform.Characteristic.ConfiguredName);
+//   }
+//   service.setCharacteristic(pA.platform.Characteristic.ConfiguredName, name);
+// }
 function setName(pA: BAF, service: Service, name: string) {
+  debugLog(pA, 'newcode', 1, `service.setCharacteristic(pA.platform.Characteristic.Name, ${name})`);
   service.setCharacteristic(pA.platform.Characteristic.Name, name);
 
   if (!service.testCharacteristic(pA.platform.Characteristic.ConfiguredName)) {
+    debugLog(pA, 'newcode', 1, 'service.addCharacteristic(pA.platform.Characteristic.ConfiguredName)');
     service.addCharacteristic(pA.platform.Characteristic.ConfiguredName);
+
+    debugLog(pA, 'newcode', 1, `service.setCharacteristic(pA.platform.Characteristic.ConfiguredName, ${name})`);
+    service.setCharacteristic(pA.platform.Characteristic.ConfiguredName, name);
+  } else {
+    debugLog(pA, 'newcode', 1,
+      `ConfiguredName Characteristic exists.  ConfiguredName is\
+     ${service.getCharacteristic(pA.platform.Characteristic.ConfiguredName).displayName}`);
   }
-  service.setCharacteristic(pA.platform.Characteristic.ConfiguredName, name);
 }
 
 /**
@@ -1020,11 +1043,11 @@ function UVCPresent(s: string, pA: BAF) {
   const value = Number(s);
   if (value) {
     if (pA.UVCSwitchService === undefined) {
-      if (pA.accessory.getService('UVCSwitch') === undefined) {
-        debugLog(pA, 'newcode', 2, 'add service: \'UVCSwitch\', \'switch-6\'');
-      } else {
-        debugLog(pA, 'newcode', 2, 'use service: \'UVCSwitch\'');
-      }
+      // if (pA.accessory.getService('UVCSwitch') === undefined) {
+      //   debugLog(pA, 'newcode', 2, 'add service: \'UVCSwitch\', \'switch-6\'');
+      // } else {
+      //   debugLog(pA, 'newcode', 2, 'use service: \'UVCSwitch\'');
+      // }
 
       pA.UVCSwitchService = pA.accessory.getService('UVCSwitch') ||
         pA.accessory.addService(pA.platform.Service.Switch, 'UVCSwitch', 'switch-6');
@@ -1033,11 +1056,11 @@ function UVCPresent(s: string, pA: BAF) {
       pA.UVCSwitchService.getCharacteristic(pA.platform.Characteristic.On)
         .onSet(pA.setUVCSwitchOnState.bind(pA))
         .onGet(pA.getUVCSwitchOnState.bind(pA));
-    } else {
-      debugLog(pA, 'newcode', 2, 'UVCPresent() pA.UVCSwitchService !== undefined');
+    // } else {
+    //   debugLog(pA, 'newcode', 2, 'UVCPresent() pA.UVCSwitchService !== undefined');
     }
-  } else {
-    debugLog(pA, 'redflag', 1, `UVCPresent called wiith value: ${value}`);
+  // } else {
+  //   debugLog(pA, 'redflag', 1, `UVCPresent called wiith value: ${value}`);
   }
 }
 
@@ -1110,9 +1133,9 @@ function bulbsPresent2(s: string, pA: BAF) {
   if (pA.Model !== MODEL_HAIKU_L) {
     bulbsPresent(pA, a[0]==='true', a[1]==='true');
   } else {
-    if (a[1] === 'true') {
-      debugLog(pA, 'newcode', 1, 'Thwarting Haiku L attempt to assert existence of an uplight');
-    }
+    // if (a[1] === 'true') {
+    //   debugLog(pA, 'newcode', 1, 'Thwarting Haiku L attempt to assert existence of an uplight');
+    // }
     bulbsPresent(pA, Boolean(a[0]=== 'true'), false);
   }
 }
@@ -1190,7 +1213,7 @@ function setTargetBulb(s: string, pA:BAF) {
     pA.targetBulb = TARGETLIGHT_DOWN;
   } else {
     const value = Number(s);
-    debugLog(pA, ['newcode', 'light'], [2, 1], 'setTargetBulb: ' + value);
+    // debugLog(pA, ['newcode', 'light'], [2, 1], 'setTargetBulb: ' + value);
     pA.targetBulb = value;
 
   }
@@ -1480,13 +1503,13 @@ function UVCOnState(s: string, pA:BAF) {
   const onValue = (value === 0 ? false : true);
   pA.UVCSwitchOn = onValue; // we do this even if there's no UVCSwitchService yet, so we can initialize it if/when it's created
 
-  debugLog(pA, 'newcode', 2, `UVCOnState() onValue: ${onValue}`);
+  // debugLog(pA, 'newcode', 2, `UVCOnState() onValue: ${onValue}`);
 
   if (pA.UVCSwitchService) {
-    debugLog(pA, ['newcode', 'characteristics'], [2, 3], 'update UVC Mode:' + pA.UVCSwitchOn);
+    // debugLog(pA, ['newcode', 'characteristics'], [2, 3], 'update UVC Mode:' + pA.UVCSwitchOn);
     pA.UVCSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.UVCSwitchOn);
-  } else {
-    debugLog(pA, 'newcode', 2, `UVCOnState() pA.UVCSwitchService: ${pA.UVCSwitchService}`);
+  // } else {
+  //   debugLog(pA, 'newcode', 2, `UVCOnState() pA.UVCSwitchService: ${pA.UVCSwitchService}`);
   }
 }
 
@@ -1495,7 +1518,7 @@ function fanOccupancyDetectedState(s: string, pA:BAF) {
   if (pA.showFanOccupancySensor) {
     const occupancy = (value === 0 ? false : true);
     pA.fanOccupancyDetected = occupancy;
-    debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update Fan Occupancy:' + pA.fanOccupancyDetected);
+    // debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update Fan Occupancy:' + pA.fanOccupancyDetected);
     pA.fanOccupancySensorService.updateCharacteristic(pA.platform.Characteristic.OccupancyDetected, value);
   }
 }
@@ -1505,7 +1528,7 @@ function lightOccupancyDetectedState(s: string, pA:BAF) {
   if (pA.showLightOccupancySensor) {
     const occupancy = (value === 0 ? false : true);
     pA.lightOccupancyDetected = occupancy;
-    debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update Light Occupancy:' + pA.lightOccupancyDetected);
+    // debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update Light Occupancy:' + pA.lightOccupancyDetected);
     pA.lightOccupancySensorService.updateCharacteristic(pA.platform.Characteristic.OccupancyDetected, value);
   }
 }
@@ -1804,7 +1827,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 [b, v] = getValue(b);
                 // lightSelector(v, pA);
                 funStack.splice(0, 0, [setTargetBulb, String(v)]);
-                debugLog(pA, 'newcode', 2, 'inserted setTargetBulb at start of funStack');
+                // debugLog(pA, 'newcode', 2, 'inserted setTargetBulb at start of funStack');
                 break;
               case 86:  // temperature
                 [b, v] = getValue(b);
@@ -1824,13 +1847,13 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               case 66:  // fan_occupancy_detected (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
                 [b, v] = getValue(b);
                 funStack.push([fanOccupancyDetectedState, String(v)]);
-                debugLog(pA, 'newcode', 1, `fan occupancy: ${v} detected per field: ${field}`);
+                // debugLog(pA, 'newcode', 1, `fan occupancy: ${v} detected per field: ${field}`);
                 break;
 
               case 85:  // light_occupancy_detected (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
                 [b, v] = getValue(b);
                 funStack.push([lightOccupancyDetectedState, String(v)]);
-                debugLog(pA, 'newcode', 1, `light occupancy: ${v} detected per field: ${field}`);
+                // debugLog(pA, 'newcode', 1, `light occupancy: ${v} detected per field: ${field}`);
                 break;
 
 
@@ -2010,7 +2033,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                       // until someone without an es6 has the "false downlight" issue.
                       if (pA.Model === 'es6') {
                         [b, v] = getValue(b);
-                        debugLog(pA, 'newcode', 2, `ignoring field 17 message with subfield: "${field}", value: ${v} for es6 fans`);
+                        // debugLog(pA, 'newcode', 2, `ignoring field 17 message with subfield: "${field}", value: ${v} for es6 fans`);
                         break;
                       }
                       /* falls through */
@@ -2018,7 +2041,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                     case 4: // downlight!
                       [b, v] = getValue(b);
                       debugLog(pA, 'protoparse', 1, '          value: ' + v);
-                      debugLog(pA, ['cluing', 'newcode'], [1, 2], `downlight equipped per field ${field}`);
+                      debugLog(pA, 'cluing', 1, `downlight equipped per field ${field}`);
                       if (v === 1) {
                         hasDownlight = true;
                       } else {
@@ -2027,7 +2050,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                       break;
 
                     case 6: // uplight detected
-                      debugLog(pA, ['cluing', 'newcode'], [1, 2], 'uplight equipped');
+                      debugLog(pA, 'cluing', 1, 'uplight equipped');
 
                       [b, v] = getValue(b);  // uplight equipped?
                       debugLog(pA, 'protoparse', 1, `          value: ${v}`);
@@ -2041,7 +2064,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                     case 12: // UV-C? - issue #20/aveach/Living Room Fan (es6 [3.1.1])
                       [b, v] = getValue(b);
                       funStack.push([UVCPresent, String(v)]);
-                      debugLog(pA, 'newcode', 2, `field: 17, subfield "${field}", value: ${v}`);
+                      // debugLog(pA, 'newcode', 2, `field: 17, subfield "${field}", value: ${v}`);
                       break;
 
                     default:
