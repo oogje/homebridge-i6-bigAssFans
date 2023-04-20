@@ -2,7 +2,7 @@
   "private": false,
   "displayName": "Big Ass Fans i6",
   "name": "homebridge-i6-bigassfans",
-  "version": "0.5.4-beta8",
+  "version": "0.5.4-beta9",
   "description": "Homebridge plugin for Big Ass Fans.",
   "license": "MIT",
   "repository": {
