@@ -270,10 +270,19 @@ export class BigAssFans_i6PlatformAccessory {
 
     const pre052beta3lightBulbService = this.accessory.getService(this.platform.Service.Lightbulb);
     const post052beta3lightBulbService = this.accessory.getService('downlight');
-    // deal with Issue #17,
-    if (pre052beta3lightBulbService && post052beta3lightBulbService) {
-      this.accessory.removeService(post052beta3lightBulbService);
-    }
+    // // deal with Issue #17,
+    // if (pre052beta3lightBulbService && post052beta3lightBulbService) {
+    //   debugLog(this, 'newcode', 1, 'this.accessory.removeService(post052beta3lightBulbService);')
+    //   this.accessory.removeService(post052beta3lightBulbService);
+    //   let downlightservice = this.accessory.getService('downlight')
+    //   if (downlightservice) {
+    //     debugLog(this, 'newcode', 1, 'downlight service remains')
+    //   } else {
+    //     debugLog(this, 'newcode', 1, 'downlight service removed')
+    //   }
+    // } else {
+    //   debugLog(this, 'newcode', 1, '!pre052beta3lightBulbService && post052beta3lightBulbService')
+    // }
 
     if (this.noLights) {
       hbLog.info(this.Name + ' lights disabled by configuration');
@@ -1016,19 +1025,11 @@ function sortFunction(a, b) {
 //   service.setCharacteristic(pA.platform.Characteristic.ConfiguredName, name);
 // }
 function setName(pA: BAF, service: Service, name: string) {
-  debugLog(pA, 'newcode', 1, `service.setCharacteristic(pA.platform.Characteristic.Name, ${name})`);
   service.setCharacteristic(pA.platform.Characteristic.Name, name);
 
   if (!service.testCharacteristic(pA.platform.Characteristic.ConfiguredName)) {
-    debugLog(pA, 'newcode', 1, 'service.addCharacteristic(pA.platform.Characteristic.ConfiguredName)');
     service.addCharacteristic(pA.platform.Characteristic.ConfiguredName);
-
-    debugLog(pA, 'newcode', 1, `service.setCharacteristic(pA.platform.Characteristic.ConfiguredName, ${name})`);
     service.setCharacteristic(pA.platform.Characteristic.ConfiguredName, name);
-  } else {
-    debugLog(pA, 'newcode', 1,
-      `ConfiguredName Characteristic exists.  ConfiguredName is\
-     ${service.getCharacteristic(pA.platform.Characteristic.ConfiguredName).displayName}`);
   }
 }
 

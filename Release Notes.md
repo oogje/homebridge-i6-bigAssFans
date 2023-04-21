@@ -1,5 +1,10 @@
 ## Release Notes
 
+### v0.5.4-beta10
+addresses beta9's inadequate attempt to address Issue #21's resolution
+in order to do that, the hack that addressed Issue #17 was mostly removed - that hack ought to be unnecessary by now.
+I trust someone will open an issue if it's not
+
 ### v0.5.4-beta9
 humidity sensor can be disabled
 addresses problem with Issue #21's resolution  - name changes don't survive a restart
