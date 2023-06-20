@@ -1,5 +1,11 @@
 ## Release Notes
 
+### v0.5.4-beta11
+added `"downlightEquipped"` and `'uplightEquipped"` config parameters which override the associated light's automatic detection.
+`true` means there is a light, `false` means there isn't one.  See issue #28.
+If you need to override a light to `true` because the plugin doesn't recognize it, please open an issue so we can collect more
+data and try to fix the auto-detection code.
+
 ### v0.5.4-beta10
 addresses beta9's inadequate attempt to address Issue #21's resolution
 in order to do that, the hack that addressed Issue #17 was mostly removed - that hack ought to be unnecessary by now.

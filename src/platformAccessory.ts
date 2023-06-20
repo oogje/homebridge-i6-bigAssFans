@@ -88,6 +88,9 @@ export class BigAssFans_i6PlatformAccessory {
   public showFanOccupancySensor = false;
   public showLightOccupancySensor = false;
 
+  public downlightEquipped = undefined
+  public uplightEquipped = undefined
+
   public enableDebugPort = false;
   public simulated = false; // for future use
 
@@ -155,6 +158,12 @@ export class BigAssFans_i6PlatformAccessory {
 
     if (accessory.context.device.noLights) {
       this.noLights = true;  // defaults to false in property initialization
+    }
+    if (accessory.context.device.downlightEquipped !== undefined) {
+      this.downlightEquipped = accessory.context.device.downlightEquipped;
+    }
+    if (accessory.context.device.uplightEquipped !== undefined) {
+      this.uplightEquipped = accessory.context.device.uplightEquipped;
     }
 
     if (accessory.context.device.whoosh) {
@@ -812,6 +821,7 @@ export class BigAssFans_i6PlatformAccessory {
 * connect to the fan, send an initialization message, establish the error and data callbacks and start a keep-alive interval timer.
 */
 import net = require('net');
+import { ifError } from 'assert';
 
 function networkSetup(pA: BAF) {
 
@@ -1070,11 +1080,11 @@ function bulbsPresent(pA:BAF, downlightPresent:boolean, uplightPresent:boolean) 
 
   if (downlightPresent) {
     pA.bulbCount++;
-    infoLogOnce(pA, 'downlight detected');
-    debugLog(pA, 'light', 1, 'downlight detected');
+    infoLogOnce(pA, 'downlight presented');
+    debugLog(pA, 'light', 1, 'downlight presented');
   } else {
-    infoLogOnce(pA, 'no downlight detected');
-    debugLog(pA, 'light', 1, 'no downlight detected');
+    infoLogOnce(pA, 'no downlight presented');
+    debugLog(pA, 'light', 1, 'no downlight presented');
 
     let service = pA.accessory.getService(pA.platform.Service.Lightbulb);
     if (service) {
@@ -1091,8 +1101,8 @@ function bulbsPresent(pA:BAF, downlightPresent:boolean, uplightPresent:boolean) 
 
   if (uplightPresent) {
     pA.bulbCount++;
-    debugLog(pA, 'light', 1, 'uplight detected');
-    infoLogOnce(pA, 'uplight detected');
+    debugLog(pA, 'light', 1, 'uplight presented');
+    infoLogOnce(pA, 'uplight presented');
 
     // Uplight Bulb was not pre-instantiated so we do it here if we haven't already done it.
     if (!pA.accessory.getService('uplight')) {
@@ -1116,8 +1126,8 @@ function bulbsPresent(pA:BAF, downlightPresent:boolean, uplightPresent:boolean) 
       // .onGet(pA.getUpColorTemperature.bind(pA));
     }
   } else {
-    infoLogOnce(pA, 'no uplight detected');
-    debugLog(pA, 'light', 1, 'no uplight detected');
+    infoLogOnce(pA, 'no uplight presented');
+    debugLog(pA, 'light', 1, 'no uplight presented');
     const service = pA.accessory.getService('uplight');
     if (service) {
       debugLog(pA, 'light', 1, 'remove service: \'uplight\'');
@@ -2074,7 +2084,22 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                       break;
                   }
                 }
-                // bulbsPresent(pA, hasDownlight, hasUplight);
+                if (pA.downlightEquipped !== undefined) {
+                  if (hasDownlight !== pA.downlightEquipped) {
+                    let str = `downlight presence overrriden by user configuration ("downlightEquipped": ${pA.downlightEquipped})`;
+                    hasDownlight = pA.downlightEquipped === true ? true : false;
+                    debugLog(pA, 'newcode', 1, str);
+                    infoLogOnce(pA, str);
+                  }
+                }
+                if (pA.uplightEquipped !== undefined) {
+                  if (hasUplight !== pA.uplightEquipped) {
+                    let str = `uplight presence overrriden by user configuration ("uplightEquipped": ${pA.uplightEquipped})`;
+                    hasUplight = pA.uplightEquipped == true ? true : false;
+                    debugLog(pA, 'newcode', 1, str);
+                    infoLogOnce(pA, str);
+                  }
+                }
                 funStack.push([bulbsPresent2, String([hasDownlight, hasUplight])]);
                 break;
               }
