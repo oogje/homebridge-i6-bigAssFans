@@ -88,8 +88,8 @@ export class BigAssFans_i6PlatformAccessory {
   public showFanOccupancySensor = false;
   public showLightOccupancySensor = false;
 
-  public downlightEquipped = undefined
-  public uplightEquipped = undefined
+  public downlightEquipped = undefined;
+  public uplightEquipped = undefined;
 
   public enableDebugPort = false;
   public simulated = false; // for future use
@@ -821,7 +821,6 @@ export class BigAssFans_i6PlatformAccessory {
 * connect to the fan, send an initialization message, establish the error and data callbacks and start a keep-alive interval timer.
 */
 import net = require('net');
-import { ifError } from 'assert';
 
 function networkSetup(pA: BAF) {
 
@@ -2086,7 +2085,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 }
                 if (pA.downlightEquipped !== undefined) {
                   if (hasDownlight !== pA.downlightEquipped) {
-                    let str = `downlight presence overrriden by user configuration ("downlightEquipped": ${pA.downlightEquipped})`;
+                    const str = `downlight presence overrriden by user configuration ("downlightEquipped": ${pA.downlightEquipped})`;
                     hasDownlight = pA.downlightEquipped === true ? true : false;
                     debugLog(pA, 'newcode', 1, str);
                     infoLogOnce(pA, str);
@@ -2094,8 +2093,8 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 }
                 if (pA.uplightEquipped !== undefined) {
                   if (hasUplight !== pA.uplightEquipped) {
-                    let str = `uplight presence overrriden by user configuration ("uplightEquipped": ${pA.uplightEquipped})`;
-                    hasUplight = pA.uplightEquipped == true ? true : false;
+                    const str = `uplight presence overrriden by user configuration ("uplightEquipped": ${pA.uplightEquipped})`;
+                    hasUplight = pA.uplightEquipped === true ? true : false;
                     debugLog(pA, 'newcode', 1, str);
                     infoLogOnce(pA, str);
                   }
