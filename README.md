@@ -4,7 +4,7 @@
 <img src="https://raw.githubusercontent.com/oogje/homebridge-i6-bigAssFans/main/es6.jpeg"/>
 </h1>
 
-## homebridge-i6-bigassfans
+## homebridge-i6-bigassfans (v0.5.4)
 
 [![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
 <!-- [![homebridge-miot](https://badgen.net/npm/v/homebridge-bigassfans-i6?icon=npm)](https://www.npmjs.com/package/homebridge-bigassfans-i6)
@@ -14,7 +14,7 @@
 
 </span>
 
-`homebridge-i6-bigassfans` is a plugin for Homebridge which allows you to control Big Ass Fans i6, es6, and Haiku H/I Series and Haiku L Series fans with firmware version 3.0 or greater.
+`homebridge-i6-bigassfans` is a plugin for Homebridge which allows you to control Big Ass Fans i6, es6, Haiku H/I Series and Haiku L Series fans with firmware version 3.0 or greater.
 
 The plugin name reflects that it was created to support, and was limited to, i6 model fans when no other homebridge
 alternative was available. 
@@ -37,6 +37,8 @@ Occasionally HomeKit will briefly show the light (if equipped) or the light auto
 * Change speed, and direction (Keep in mind Big Ass Fans discourages reversing speed.)
 * Ability to disable the fan direction control.
 * Change brightness level of LED light.
+* Control UV-C light
+* Exposes Motion Sensors
 * Display the fan's bluetooth remote's temperature and humidity sensors (i6 only).
 * Display the fan's temperature sensors (Haiku Fans).
 * Turn Whoosh Mode on or off.
@@ -145,11 +147,13 @@ Adds accessory switch for the fan's Eco mode (true/false, defaults to false).
 #### Advanced Configuration Fields
 
 * `probeFrequency` [optional]
-Sets the frequency that probe messages are sent to the fan.  A frequency 0 milliseconds turns probing off (defaults to 60000).
+Sets the frequency that probe messages are sent to the fan.  A frequency 0 milliseconds turns probing off (defaults to 60000 milliseconds).
 
 #### Other Configuration Fields
-* `showTemperture` [optional]
-Can be set to false if you don't want to see the temperature (defaults to true).
+* `noLight` [optional] Eliminates light switches (defaults to false)
+* `showHumidity` [optional] Exposes humidity sensor (defaults to true)
+* `showTemperture` [optional] Exposes temperature sensor (defaults to true).
+* `downlightEquipped` [optional] Overrides downlight detection (defaults to undefined)
 
 ### **Other**
 
