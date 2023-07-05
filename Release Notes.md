@@ -1,5 +1,13 @@
 ## Release Notes
 
+### v0.5.4
+- exposes UV-C light
+- exposes motion sensors
+- added `noLight` to hide light switches
+- added `showHumidity` to enable hiding humidity sensor (`"showHumidity": false`)
+- added `downlightEquipped` to override plugin's downlight detection
+- bug fixes
+
 ### v0.5.4-beta11
 added `"downlightEquipped"` and `"uplightEquipped"` config parameters which override the associated light's automatic detection.
 `true` means there is a light, `false` means there isn't one.  See issue #28.
