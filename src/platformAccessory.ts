@@ -159,6 +159,9 @@ export class BigAssFans_i6PlatformAccessory {
     if (accessory.context.device.noLights) {
       this.noLights = true;  // defaults to false in property initialization
     }
+
+    debugLog(this, 'newcode', 1, `downlightEquipped: ${this.downlightEquipped}`);
+
     if (accessory.context.device.downlightEquipped !== undefined) {
       this.downlightEquipped = accessory.context.device.downlightEquipped;
     }
