@@ -1,5 +1,8 @@
 ## Release Notes
 
+### V0.6.0-beta1
+incorporates recently discovered protocol field definitions,  This information will serve to reduce the amount of guesswork and coding gymnastics.  As an immediate consequence, the workaround for misidentifying the presence of a downlight (Issue #28) should now be unnecessary. 
+
 ### v0.5.4
 - exposes UV-C light
 - exposes motion sensors

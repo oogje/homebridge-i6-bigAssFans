@@ -1781,7 +1781,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
             [b, type, field] = getProtoElements(b);
             debugLog(pA, 'protoparse', 1, '      field: ' + field);
             switch (field) {
-              case 2: // product type
+              case 2: // product type/model
                 [b, s] = getString(b);
                 // productType(s, pA);
                 funStack.push([productType, s]);
@@ -1816,6 +1816,11 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 // ecoModeOnState(v, pA);
                 funStack.push([ecoModeOnState, String(v)]);
                 break;
+              case 66:  // fan_occupancy_detected (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+                [b, v] = getValue(b);
+                funStack.push([fanOccupancyDetectedState, String(v)]);
+                // debugLog(pA, 'newcode', 1, `fan occupancy: ${v} detected per field: ${field}`);
+                break;
               case 68:  // light on/off/auto
                 [b, v] = getValue(b);
                 // lightOnState(v, pA);
@@ -1836,11 +1841,16 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 // dimToWarmOnState(v, pA);
                 funStack.push([dimToWarmOnState, String(v)]);
                 break;
-              case 82: // lightSelector?
+              case 82: // lightSelector aka multiple light mode 0/all, 1/downlight, 2/uplight
                 [b, v] = getValue(b);
                 // lightSelector(v, pA);
                 funStack.splice(0, 0, [setTargetBulb, String(v)]);
                 // debugLog(pA, 'newcode', 2, 'inserted setTargetBulb at start of funStack');
+                break;
+              case 85:  // light occupied
+                [b, v] = getValue(b);
+                funStack.push([lightOccupancyDetectedState, String(v)]);
+                // debugLog(pA, 'newcode', 1, `light occupancy: ${v} detected per field: ${field}`);
                 break;
               case 86:  // temperature
                 [b, v] = getValue(b);
@@ -1852,70 +1862,72 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 // currentRelativeHumidity(v / 100, pA);
                 funStack.push([currentRelativeHumidity, String(v/100)]);
                 break;
-              case 172: // UV-C
+              case 172: // UV-C enabled
                 [b, v] = getValue(b);
                 funStack.push([UVCOnState, String(v)]);
                 break;
 
-              case 66:  // fan_occupancy_detected (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
-                [b, v] = getValue(b);
-                funStack.push([fanOccupancyDetectedState, String(v)]);
-                // debugLog(pA, 'newcode', 1, `fan occupancy: ${v} detected per field: ${field}`);
-                break;
-
-              case 85:  // light_occupancy_detected (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
-                [b, v] = getValue(b);
-                funStack.push([lightOccupancyDetectedState, String(v)]);
-                // debugLog(pA, 'newcode', 1, `light occupancy: ${v} detected per field: ${field}`);
-                break;
-
-
-              // ignore strings
+              // ignore strings / messages
               case 1: // name
               case 4: // local datetime
-              case 5: // zulu datetime
+              case 5: // UTC datetime
+              case 6: // time zone
               case 8: // MAC address
+              case 9: // cloud ID
               case 10:  // fan's UUID
-              case 11:  // website - api.bigassfans.com
+              case 11:  // website - api.bigassfans.com (cloud server )
+              case 13:  // api version (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+              case 37:  // pcba part number
+              case 38:  // pcba revision
+              case 83:  // standby LED - message: 1/color reset, 2/enabled, 3/percent, 4/red, 5/green, 6/blue
               case 120: // IP address
+              case 139: // wall control configuration - message: 1/top button function, 2/bottom button function (see schema)
                 [b, s] = getString(b);  // ignore
                 break;
 
               // ignore numbers
+              case 15:  // device type ID
               case 45:  // fan speed as %
               case 47:  // fan auto comfort
               case 48:  // comfort ideal temperature
               case 50:  // comfort min speed
               case 51:  // comfort max speed
-              case 52:  // fan auto -> motion -> motion sense switch
+              case 52:  // fan auto -> motion -> motion sense switch (fan occupancy enable)
               case 53:  // fan auto -> motion -> motion timeout (time)
               case 54:  // fan return to auto (return to auto switch)
-              case 55:  // fan return to auto (return after)
+              case 55:  // fan return to auto (return to auto timeout)
               case 60:  // comfort heat assist
-              case 63:  // [target per aiobafi6] revolutions per minute
+              case 61:  // comfort sense heat assist speed
+              case 62:  // comfort sense heat assist direction
+              case 63:  // target revolutions per minute
+              case 64:  // actual rpm
+              case 67:  // fan on means auto
               case 70:  // brightness as level (0,1-16)
+              case 72:  // light occupancy enabled
               case 73:  // light auto motion timeout (time)
               case 74:  // light return to auto (return to auto switch)
               case 75:  // light return to auto (return after)
               case 78:  // warmest color temperature
               case 79:  // coolest color temperature
-              case 134: // LED indicators
-              case 135: // fan beep
-              case 136: // legacy_ir_remote_enable (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto) [haiku only?]
-              case 150: // prevent additional controls
+              case 95:  // fan timer minutes
+              case 96:  // fan timer UTC expiration
+              case 109: // light on means auto
+              case 134: // LED indicators enabled
+              case 135: // audible indicator enabled
+              case 136: // legacy IR remote enabled
+              case 140: // assist with - 0/nothing, 1/heating, 2/cooling, 3/all
+              case 150: // remote discovery enabled
+              case 151: // external device count
+              case 153: // bluetooth remote supported
+              case 173: // UV-C life
                 [b, v] = getValue(b); // ignore
                 debugLog(pA, 'protoparse', 1, '        value: ' + v);
                 break;
 
               // mystery strings
-              case 6:
-              case 9:
-              case 13:  // api version (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
-              case 37:
               case 56:
               case 59:
               case 76:
-              case 83:
                 [b, s] = getString(b);
                 debugLog(pA, 'protoparse', 1, `        string: "${s}"`);
                 debugLog(pA, 'cluing', 6, `field ${field}, mystery string: "${s}"`);
@@ -1924,7 +1936,6 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               // mystery numbers
               case 3:
               case 14:
-              case 15:
               case 24:
               case 25:
               case 26:
@@ -1937,23 +1948,13 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               case 33:
               case 49:
               case 57:
-              case 61:  // comfort_heat_assist_speed (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
-              case 62:  // comfort_heat_assist_reverse_enable (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
-              case 64:  // current_rpm (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
-              case 67:  // issue #17/Kohle81/Ventilator (Haiku L Series [3.1.1])
-              case 72:
               case 84:  // issue #17/Kohle81/Ventilator (Haiku L Series [3.1.1])
               case 89:
-              case 109:
               case 118:
               case 121:
               case 133:
               case 137:
               case 138:
-              case 140:
-              case 151:
-              case 153:
-              case 173:
               case 174:
               case 175:
                 [b, v] = getValue(b);
@@ -1961,24 +1962,26 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 debugLog(pA, 'cluing', 6, 'field ' + field + ', mystery number: ' + v);
                 break;
 
-              case 124: { // WiFi messages
+              case 16: {  // detailed version
                 [b, length] = getVarint(b);
                 const remainingLength = (b.length) - length;
                 while (b.length > remainingLength) {
                   [b, type, field] = getProtoElements(b);
                   debugLog(pA, 'protoparse', 1, '        field: ' + field);
                   switch (field) {
-                    case 1: // SSID
-                      [b, s] = getString(b); // ignore
-                      debugLog(pA, 'protoparse', 1, `          string: "${s}"`);
-                      break;
-                    case 2: // RSSI (signal strength) in dBm?
+                    case 1: // Firmware type - 0/host, 1/wifi, 2/light, 3/motor
                       [b, v] = getValue(b); // ignore
                       debugLog(pA, 'protoparse', 1, '          value: ' + v);
                       break;
 
+                    case 2: // app version
+                    case 3: // boot loader version
+                      [b, s] = getString(b); // ignore
+                      debugLog(pA, 'protoparse', 1, `          string: "${s}"`);
+                      break;
+
                     default:
-                      debugLog(pA, 'cluing', 1, 'fell into default, WiFi messages field: "' + field + '"');
+                      debugLog(pA, 'cluing', 1, 'fell into default, field 16 message with subfield: "' + field + '"');
                       b = doUnknownField(b, type, pA);
                       break;
                   }
@@ -1986,37 +1989,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 break;
               }
 
-              case 16:  // firmware (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
-              case 152: { // remote_firmware (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
-                [b, length] = getVarint(b);
-                const remainingLength = (b.length) - length;
-                while (b.length > remainingLength) {
-                  [b, type, field] = getProtoElements(b);
-                  debugLog(pA, 'protoparse', 1, '        field: ' + field);
-                  switch (field) {
-                    case 1:
-                    case 5: // issue #10/Emotive9/Family Room (es6 [3.1.0])
-                    case 6: // issue #10/Emotive9/Family Room (es6 [3.1.0])
-                      [b, v] = getValue(b); // ignore
-                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
-                      break;
-                    case 2:
-                    case 3:
-                    case 4:
-                      [b, s] = getString(b); // ignore
-                      debugLog(pA, 'protoparse', 1, `          string: "${s}"`);
-                      break;
-
-                    default:
-                      debugLog(pA, 'cluing', 1, 'fell into default, field 16 or 152 message with subfield: "' + field + '"');
-                      b = doUnknownField(b, type, pA);
-                      break;
-                  }
-                }
-                break;
-              }
-
-              case 17: { // capabilities (include light pressence)
+              case 17: { // capabilities (including light pressence)
                 let hasDownlight = false;
                 let hasUplight = false;
                 [b, length] = getVarint(b);
@@ -2025,31 +1998,21 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                   [b, type, field] = getProtoElements(b);
                   debugLog(pA, 'protoparse', 1, '        field: ' + field);
                   switch (field) {
-                    case 1: // has comfort (https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto 7/26/2022)
-                    case 3: // has comfort (https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto 7/26/2022)
-                    case 7:
-                    case 8:
-                    case 9:
-                    case 10:
-                    case 11:
-                    case 13:
-                    case 14:
+                    case 1: // has temperature sensor (ms)
+                    case 2: // has humidity sensor (ms)
+                    case 3: // has occupancy sensor (ms)
+                    case 5: // has light sensor (ms)
+                    case 6: // has color temp control
+                    case 7: // has fan
+                    case 8: // has speaker
+                    case 9: // has piezo (?)
+                    case 10: // has LED indicators
+                    case 13: // has standby LED
+                    case 14: // has eco mode
                       [b, v] = getValue(b);  // ignore
                       debugLog(pA, 'protoparse', 1, `          value: ${v}`);
                       debugLog(pA, 'cluing', 6, `field 17, mystery field: ${field}, value: ${v}`);
                       break;
-
-                    case 2: // downlight?
-                      // this case was added to resolve issue #14 but it's not a great solution because some fans have shown to
-                      // send this message even when they don't have a downlight (issue #20).
-                      // since I don't have detailed logs from issue #14 to test changes, it's more practical to just special-case the es6
-                      // until someone without an es6 has the "false downlight" issue.
-                      if (pA.Model === 'es6') {
-                        [b, v] = getValue(b);
-                        // debugLog(pA, 'newcode', 2, `ignoring field 17 message with subfield: "${field}", value: ${v} for es6 fans`);
-                        break;
-                      }
-                      /* falls through */
 
                     case 4: // downlight!
                       [b, v] = getValue(b);
@@ -2062,7 +2025,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                       }
                       break;
 
-                    case 6: // uplight detected
+                    case 11: // uplight detected
                       debugLog(pA, 'cluing', 1, 'uplight equipped');
 
                       [b, v] = getValue(b);  // uplight equipped?
@@ -2106,19 +2069,20 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 break;
               }
 
-              case 156: { // stats (uptime) (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
+              case 156: { // debug info
                 [b, length] = getVarint(b);
                 const remainingLength = (b.length) - length;
                 while (b.length > remainingLength) {
                   [b, type, field] = getProtoElements(b);
                   debugLog(pA, 'protoparse', 1, `        field: ${field}`);
                   switch (field) {
-                    case 1: // uptime (minutes) https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto 7/26/2022
-                    case 2:
-                    case 4:
-                    case 5:
-                    case 6: // issue #17-19/afello77/Haiku L Series [3.1.1])
-                    case 7:
+                    case 1: // uptime (minutes)
+                    case 2: // reboot count total
+                    case 3: // reboot count since por(?)
+                    case 4: // last reboot reason (see schema)
+                    case 5: // last reboot details
+                    case 6: // software error - issue #17-19/afellows77/Haiku L Series [3.1.1])
+                    case 7: // software error details
                       [b, v] = getValue(b);
                       debugLog(pA, 'cluing', 6, `field 156/${field}, mystery value: ${v}`);
                       debugLog(pA, 'protoparse', 1, '          value: ' + v);
@@ -2133,18 +2097,73 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 break;
               }
 
-              case 171: { // something to do with a "group" including group name
+              case 124: { // WiFi messages
+                [b, length] = getVarint(b);
+                const remainingLength = (b.length) - length;
+                while (b.length > remainingLength) {
+                  [b, type, field] = getProtoElements(b);
+                  debugLog(pA, 'protoparse', 1, '        field: ' + field);
+                  switch (field) {
+                    case 1: // SSID
+                      [b, s] = getString(b); // ignore
+                      debugLog(pA, 'protoparse', 1, `          string: "${s}"`);
+                      break;
+                    case 2: // RSSI (signal strength) in dBm?
+                      [b, v] = getValue(b); // ignore
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
+                      break;
+
+                    default:
+                      debugLog(pA, 'cluing', 1, 'fell into default, WiFi messages field: "' + field + '"');
+                      b = doUnknownField(b, type, pA);
+                      break;
+                  }
+                }
+                break;
+              }
+
+              case 152: { // external device version
+                [b, length] = getVarint(b);
+                const remainingLength = (b.length) - length;
+                while (b.length > remainingLength) {
+                  [b, type, field] = getProtoElements(b);
+                  debugLog(pA, 'protoparse', 1, '        field: ' + field);
+                  switch (field) {
+                    case 1: // external device type - 0/bluetooth remote, 1/bluetooth wall control, 2/unknown device
+                    case 7: // reboot reason - 0 thru 9, see schema
+                      [b, v] = getValue(b); // ignore
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
+                      debugLog(pA, 'newcode', 1,
+                        `protoparse: external device version: ${field === 1 ? 'external device type:' : 'reboot reason:'} ${v}`);
+                      break;
+                    case 2: // package version
+                    case 3: // boot loader version
+                    case 4: // mac address
+                      [b, s] = getString(b); // ignore
+                      debugLog(pA, 'protoparse', 1, `          string: "${s}"`);
+                      break;
+
+                    default:
+                      debugLog(pA, 'cluing', 1, 'fell into default, field 152 message with subfield: "' + field + '"');
+                      b = doUnknownField(b, type, pA);
+                      break;
+                  }
+                }
+                break;
+              }
+
+              case 171: { // group container
                 [b, length] = getVarint(b);
                 const remainingLength = (b.length) - length;
                 while (b.length > remainingLength) {
                   [b, type, field] = getProtoElements(b);
                   debugLog(pA, 'protoparse', 1, `        field: ${field}`);
                   switch (field) {
-                    case 2:
+                    case 2: // uuid
                       [b, s] = getString(b);  // ignore
                       debugLog(pA, 'protoparse', 1, `          string: "${s}"`);
                       break;
-                    case 3:
+                    case 3: // name
                       [b, s] = getString(b);  // ignore
                       debugLog(pA, 'protoparse', 1, `          string: "${s}"`);
                       break;
@@ -2302,38 +2321,56 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 b = doUnknownField(b, type, pA);
                 break;
             }
-          } else if (field === 3) {  // schedule
+          } else if (field === 3) {  // schedule job
             [b, length] = getVarint(b);
             const residualLength = (b.length) - length;
             while (b.length > residualLength) {
               [b, type, field] = getProtoElements(b);
               debugLog(pA, 'protoparse', 1, '      field: ' + field);
               switch (field) {
-                case 1:
-                case 3:
-                case 4:
+                case 1: // action - 0/no action, 1/update, 2/remove, 3/read
+                case 3: // schedules acount
+                case 4: // schedules max
                   [b, v] = getValue(b); // ignore
                   debugLog(pA, 'protoparse', 1, '        value: ' + v);
                   break;
-                case 2: {
+                case 2: { // schedule - see schema, there's more than what's noted here
                   [b, length] = getVarint(b);
                   const residualLength = (b.length) - length;
                   while (b.length > residualLength) {
                     [b, type, field] = getProtoElements(b);
                     debugLog(pA, 'protoparse', 1, '        field: ' + field);
                     switch (field) {
-                      case 2:
-                      case 4:
+                      case 1: // id
+                      case 2: // name
                         [b, s] = getString(b);  // ignore
                         debugLog(pA, 'protoparse', 1, `          string: "${s}"`);
                         break;
-                      case 5:
-                      case 6:
+                      case 3: { // devices
+                        let bytes: Buffer;
+                        [b, bytes] = getBytes(b);  // ignore
+                        debugLog(pA, 'protoparse', 1, '          buf:');
+                        for (const item of bytes) {
+                          debugLog(pA, 'protoparse', 1, `            ${item}`);
+                        }
+                        break;
+                      }
+                      case 4: { // days
+                        [b, length] = getVarint(b);
+                        const residualLength = (b.length) - length;
+                        while (b.length > residualLength) {
+                          [b, v] = getValue(b); // ignore
+                          debugLog(pA, 'protoparse', 1, '            value: ' + v);
+                        }
+                        break;
+                      }
+                      case 5: // undocumented
+                      case 6: // is enabled
                         [b, v] = getValue(b); // ignore
                         debugLog(pA, 'protoparse', 1, '          value: ' + v);
                         break;
-                      case 7:
-                      case 8: {
+                      case 7: // start event
+                      case 8: { // end event
                         const field7or8 = field;
                         [b, length] = getVarint(b);
                         const residualLength = (b.length) - length;
@@ -2341,20 +2378,35 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                           [b, type, field] = getProtoElements(b);
                           debugLog(pA, 'protoparse', 1, '          field: ' + field);
                           switch (field) {
-                            case 1:
+                            case 1: // time
                               [b, s] = getString(b);  // ignore
                               debugLog(pA, 'protoparse', 1, `            string: "${s}"`);
                               break;
-                            case 2: {
+                            case 2: { // properties
                               [b, length] = getVarint(b);
                               const residualLength = (b.length) - length;
                               while (b.length > residualLength) {
                                 [b, type, field] = getProtoElements(b);
                                 debugLog(pA, 'protoparse', 1, '            field: ' + field);
                                 switch (field) {
-                                  case 1:
-                                  case 5:
-                                  case 6:
+                                  case 1: // fan mode - 0/off, 1/on, 2/auto
+                                  case 2: // fan direction
+                                  case 3: // fan percent
+                                  case 4: // fan speed
+                                  case 5: // light mode - 0/off, 1/on, 2/auto
+                                  case 6: // light percent
+                                  case 7: // light level
+                                  case 8: // light color temperature
+                                  case 9: // up light percent
+                                  case 10: // multiple light mode = 0/all lights, 1/down light, 2/up light
+                                  case 11: // comfort sense enable
+                                  case 12: // comfort sense ideal temperature
+                                  case 13: // comfort sense min speed
+                                  case 14: // comfort sense max speed
+                                  case 15: // fan occupancy enabled
+                                  case 16: // fan occupancy timeout
+                                  case 17: // light occupancy enabled
+                                  case 18: // light occupancy timeout
                                     [b, v] = getValue(b); // ignore
                                     debugLog(pA, 'protoparse', 1, '              value: ' + v);
                                     break;
@@ -2362,6 +2414,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                                   default:
                                     debugLog(pA, 'cluing', 1, `            unknown schedule field 2/${field7or8}/2/${field}`);
                                     b = doUnknownField(b, type, pA);
+                                    break;
                                 }
                               }
                               break;
@@ -2369,7 +2422,8 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
 
                             default:
                               debugLog(pA, 'cluing', 1, `          unknown schedule field 2/${field7or8}-${field}`);
-                              b = doUnknownField(b, type, pA);                              break;
+                              b = doUnknownField(b, type, pA);
+                              break;
                           }
                         }
                         break;
@@ -2459,6 +2513,13 @@ function doUnknownField(b: Buffer, type: number, pA: BAF) {
 //   }
 //   return b;
 // }
+
+
+function getBytes(b: Buffer) : [Buffer, Buffer] {
+  let length: number;
+  [b, length] = getVarint(b);
+  return [b.subarray(length), b.subarray(0, length)];
+}
 
 function getString(b: Buffer) : [Buffer, string] {
   let length: number;
