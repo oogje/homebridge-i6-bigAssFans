@@ -1,5 +1,10 @@
 ## Release Notes
 
+### v0.6.0-beta2
+- relies on fan's communicated capabilities to determine types and number of lights, sensors, etc.
+- calls node's connect() with IPV4 family option to address issue #29
+- Homebridge UI won't ask for the model anymore
+
 ### V0.6.0-beta1
 incorporates recently discovered protocol field definitions,  This information will serve to reduce the amount of guesswork and coding gymnastics.  As an immediate consequence, the workaround for misidentifying the presence of a downlight (Issue #28) should now be unnecessary. 
 

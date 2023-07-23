@@ -12,12 +12,10 @@ const MAXFANSPEED = 7;
 
 const ONEBYTEHEADER = [0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03];
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const MODEL_I6 =       'i6';
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const MODEL_ES6 =      'es6';
-const MODEL_HAIKU_L =  'Haiku L Series';
-const MODEL_HAIKU_HI = 'Haiku H/I Series';
+// const MODEL_I6 =       'i6';
+// const MODEL_ES6 =      'es6';
+// const MODEL_HAIKU_L =  'Haiku L Series';
+// const MODEL_HAIKU_HI = 'Haiku H/I Series';
 
 const TARGETLIGHT_BOTH = 0;
 const TARGETLIGHT_DOWN = 1;
@@ -32,7 +30,42 @@ interface lightStates {
 
 type BAF = BigAssFans_i6PlatformAccessory;
 
+interface Capabilities {
+  hasTempSensor: boolean;
+  hasHumiditySensor: boolean;
+  hasOccupancySensor: boolean;
+  hasLight: boolean;
+  hasLightSensor: boolean;
+  hasColorTempControl: boolean;
+  hasFan: boolean;
+  hasSpeaker: boolean;
+  hasPiezo: boolean;
+  hasLEDIndicators: boolean;
+  hasUplight: boolean;
+  hasUVCLight: boolean;
+  hasStandbyLed: boolean;
+  hasEcoMode : boolean;
+}
+
 export class BigAssFans_i6PlatformAccessory {
+  public capabilitiesEstablished = false;
+  public capabilities: Capabilities = {
+    hasTempSensor: false,
+    hasHumiditySensor: false,
+    hasOccupancySensor: false,
+    hasLight: false,
+    hasLightSensor: false,
+    hasColorTempControl: false,
+    hasFan: false,
+    hasSpeaker: false,
+    hasPiezo: false,
+    hasLEDIndicators: false,
+    hasUplight: false,
+    hasUVCLight: false,
+    hasStandbyLed: false,
+    hasEcoMode: false,
+  };
+
   public fanService!: Service;
   public downlightBulbService!: Service;
   public uplightBulbService!: Service;
@@ -110,7 +143,10 @@ export class BigAssFans_i6PlatformAccessory {
   public Model = 'model not yet established';
   public SSID = 'apname';
   public Firmware = '';
-  // public OldProtocolFlag:boolean|undefined = undefined;
+
+  public uptimeMinutes = 0;
+  public rebootCount = 0;
+  public rebootReason = 0;
 
   public debugLevel = 1;
   public debugLevels:number[] = [];
@@ -118,8 +154,10 @@ export class BigAssFans_i6PlatformAccessory {
   public CurrentTemperature = 0;
   public CurrentRelativeHumidity = 0;
 
-  public bulbCount = 1;
-  public targetBulb = 1;
+  public bulbCount = 0;
+  public targetBulb = 0;
+  public fanOnMeansAuto = undefined;
+  public lightOnMeansAuto = undefined;
 
   public client;
   public oneByteHeaders:number[] = [];
@@ -136,18 +174,21 @@ export class BigAssFans_i6PlatformAccessory {
     this.Name = accessory.context.device.name;
 
     // defaults and enumeration of debugging keys
-    this.debugLevels['light'] = 0; // 2;
-    this.debugLevels['cluing'] = 0; // 6;
-    this.debugLevels['network'] = 0;
-    this.debugLevels['newcode'] = 0;
-    this.debugLevels['funstack'] = 0;
-    this.debugLevels['humidity'] = 0;
-    this.debugLevels['progress'] = 0;
-    this.debugLevels['redflags'] = 0; // 1;
-    this.debugLevels['direction'] = 0; // 1
-    this.debugLevels['noopcodes'] = 0;
-    this.debugLevels['protoparse'] = 0; // 2
-    this.debugLevels['characteristics'] = 0;
+    this.debugLevels['characteristics']   = 0;
+    this.debugLevels['cluing']            = 0; // 6;
+    this.debugLevels['direction']         = 0; // 1
+    this.debugLevels['funstack']          = 0;
+    this.debugLevels['humidity']          = 0;
+    this.debugLevels['light']             = 0; // 2;
+    this.debugLevels['manufacturerDebug'] = 0;
+    this.debugLevels['network']           = 0;
+    this.debugLevels['newcode']           = 0;
+    this.debugLevels['noopcodes']         = 0;
+    this.debugLevels['occupancy']         = 0;
+    this.debugLevels['progress']          = 0;
+    this.debugLevels['protoparse']        = 0; // 2
+    this.debugLevels['reconnect']         = 0;
+    this.debugLevels['redflags']          = 0; // 1;
 
     if (this.accessory.context.device.debugLevels !== undefined) {
       for (const debugEntry of this.accessory.context.device.debugLevels) {
@@ -159,8 +200,6 @@ export class BigAssFans_i6PlatformAccessory {
     if (accessory.context.device.noLights) {
       this.noLights = true;  // defaults to false in property initialization
     }
-
-    debugLog(this, 'newcode', 1, `downlightEquipped: ${this.downlightEquipped}`);
 
     if (accessory.context.device.downlightEquipped !== undefined) {
       this.downlightEquipped = accessory.context.device.downlightEquipped;
@@ -225,8 +264,6 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     if (accessory.context.device.showLightOccupancySensor) {
-      // debugLog(this, 'newcode', 1,
-      //   `accessory.context.device.showLightOccupancySensor is ${accessory.context.device.showLightOccupancySensor}`);
       this.showLightOccupancySensor = true;
     }
 
@@ -242,239 +279,6 @@ export class BigAssFans_i6PlatformAccessory {
     // am not ready to delete this code yet.
     if (this.accessory.context.device.fanModel !== undefined && this.accessory.context.device.fanModel !== 'other') {
       this.Model = this.accessory.context.device.fanModel;
-    }
-
-    const capitalizeName = this.Name[0] === this.Name[0].toUpperCase();
-    let accessoryName:string;
-
-    this.accessory.getService(this.platform.Service.AccessoryInformation)!
-      .setCharacteristic(this.platform.Characteristic.Manufacturer, 'Big Ass Fans')
-      .setCharacteristic(this.platform.Characteristic.SerialNumber, this.MAC);
-
-    // Fan
-    this.fanService = this.accessory.getService(this.platform.Service.Fan) ||
-      this.accessory.addService(this.platform.Service.Fan);
-    // this.fanService.setCharacteristic(this.platform.Characteristic.Name, this.Name);
-    setName(this, this.fanService, this.Name);
-
-    this.fanService.getCharacteristic(this.platform.Characteristic.On)
-      .onSet(this.setFanOnState.bind(this))
-      .onGet(this.getFanOnState.bind(this));
-
-    this.fanService.getCharacteristic(this.platform.Characteristic.RotationSpeed)
-      .onSet(this.setRotationSpeed.bind(this))
-      .onGet(this.getRotationSpeed.bind(this));
-
-    if (this.disableDirectionControl) {
-      // for now am commenting out this 'removeCharacteristic' line because it doesn't remove the control anyway and if it did
-      // I'd probably need to disable the update of the control in fanRotationDirection().  As it stands, fanRotationDirection()
-      // lets us know if the direction changes via remote or BAF app.
-      // this.fanService.removeCharacteristic(this.fanService.getCharacteristic(this.platform.Characteristic.RotationDirection));
-    } else {
-      this.fanService.getCharacteristic(this.platform.Characteristic.RotationDirection)
-        .onSet(this.setRotationDirection.bind(this))
-        .onGet(this.getRotationDirection.bind(this));
-    }
-
-    // Downlight Bulb
-    // We assume the downlight is present and we'll delete it later if we find out there isn't one.
-    // Except we won't create it if it's not wanted (noLights)
-
-    const pre052beta3lightBulbService = this.accessory.getService(this.platform.Service.Lightbulb);
-    const post052beta3lightBulbService = this.accessory.getService('downlight');
-    // // deal with Issue #17,
-    // if (pre052beta3lightBulbService && post052beta3lightBulbService) {
-    //   debugLog(this, 'newcode', 1, 'this.accessory.removeService(post052beta3lightBulbService);')
-    //   this.accessory.removeService(post052beta3lightBulbService);
-    //   let downlightservice = this.accessory.getService('downlight')
-    //   if (downlightservice) {
-    //     debugLog(this, 'newcode', 1, 'downlight service remains')
-    //   } else {
-    //     debugLog(this, 'newcode', 1, 'downlight service removed')
-    //   }
-    // } else {
-    //   debugLog(this, 'newcode', 1, '!pre052beta3lightBulbService && post052beta3lightBulbService')
-    // }
-
-    if (this.noLights) {
-      hbLog.info(this.Name + ' lights disabled by configuration');
-      // so the user doesn't have to clear cache
-      if (pre052beta3lightBulbService) {
-        this.accessory.removeService(pre052beta3lightBulbService);
-      }
-      if (post052beta3lightBulbService) {
-        this.accessory.removeService(post052beta3lightBulbService);
-      }
-      const service = this.accessory.getService('uplight');
-      if (service) {
-        this.accessory.removeService(service);
-      }
-    } else {
-      // down to business
-      this.downlightBulbService = this.accessory.getService(this.platform.Service.Lightbulb) ||
-        this.accessory.getService('downlight') ||
-        this.accessory.addService(this.platform.Service.Lightbulb, 'downlight', 'light-1');
-      accessoryName = capitalizeName ? ' Light' : ' light';
-      // this.downlightBulbService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
-      setName(this, this.downlightBulbService, this.Name + accessoryName);
-
-      this.downlightBulbService.getCharacteristic(this.platform.Characteristic.On)
-        .onSet(this.setDownLightOnState.bind(this))
-        .onGet(this.getDownLightOnState.bind(this));
-
-      this.downlightBulbService.getCharacteristic(this.platform.Characteristic.Brightness)
-        .onSet(this.setDownBrightness.bind(this))
-        .onGet(this.getDownBrightness.bind(this));
-
-      this.downlightBulbService.getCharacteristic(this.platform.Characteristic.ColorTemperature)
-        .onSet(this.setDownColorTemperature.bind(this))
-        .onGet(this.getDownColorTemperature.bind(this));
-    }
-
-    // Current Temperature
-    if (this.accessory.context.device.showTemperature === undefined || this.accessory.context.device.showTemperature !== false) {
-      this.temperatureSensorService = this.accessory.getService(this.platform.Service.TemperatureSensor) ||
-        this.accessory.addService(this.platform.Service.TemperatureSensor);
-      accessoryName = capitalizeName ?  ' Temperature' : ' temperature';
-      // this.temperatureSensorService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
-      setName(this, this.temperatureSensorService, this.Name + accessoryName);
-      this.temperatureSensorService.getCharacteristic(this.platform.Characteristic.CurrentTemperature)
-        .onGet(this.getCurrentTemperature.bind(this));
-    } else {
-      const service = this.accessory.getService(this.platform.Service.TemperatureSensor);
-      if (service) {
-        this.accessory.removeService(service);
-      }
-    }
-
-    // Current Relative Humidity
-    if (this.accessory.context.device.showHumidity === undefined || this.accessory.context.device.showHumidity !== false) {
-      this.humiditySensorService = this.accessory.getService(this.platform.Service.HumiditySensor) ||
-        this.accessory.addService(this.platform.Service.HumiditySensor);
-      accessoryName = capitalizeName ?  ' Humidity' : ' humidity';
-      // this.humiditySensorService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
-      setName(this, this.humiditySensorService, this.Name + accessoryName);
-
-      this.humiditySensorService.getCharacteristic(this.platform.Characteristic.CurrentRelativeHumidity)
-        .onGet(this.getCurrentRelativeHumidity.bind(this));
-    } else {
-      const service = this.accessory.getService(this.platform.Service.HumiditySensor);
-      if (service) {
-        this.accessory.removeService(service);
-      }
-    }
-
-    // Switches
-    if (this.showWhooshSwitch) {
-      this.whooshSwitchService = this.accessory.getService('whooshSwitch') ||
-        this.accessory.addService(this.platform.Service.Switch, 'whooshSwitch', 'switch-1');
-      accessoryName = capitalizeName ?  ' Whoosh' : ' whoosh';
-      // this.whooshSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
-      setName(this, this.whooshSwitchService, this.Name + accessoryName);
-
-      this.whooshSwitchService.getCharacteristic(this.platform.Characteristic.On)
-        .onSet(this.setWhooshSwitchOnState.bind(this))
-        .onGet(this.getWhooshSwitchOnState.bind(this));
-    } else {
-      const service = this.accessory.getService('whooshSwitch');
-      if (service) {
-        this.accessory.removeService(service);
-      }
-    }
-    if (this.showDimToWarmSwitch) {
-      this.dimToWarmSwitchService = this.accessory.getService('dimToWarmSwitch') ||
-        this.accessory.addService(this.platform.Service.Switch, 'dimToWarmSwitch', 'switch-2');
-      accessoryName = capitalizeName ?  ' Dim to Warm' : ' dim to warm';
-      // this.dimToWarmSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
-      setName(this, this.dimToWarmSwitchService, this.Name + accessoryName);
-
-      this.dimToWarmSwitchService.getCharacteristic(this.platform.Characteristic.On)
-        .onSet(this.setDimToWarmSwitchOnState.bind(this))
-        .onGet(this.getDimToWarmSwitchOnState.bind(this));
-    } else {
-      const service = this.accessory.getService('dimToWarmSwitch');
-      if (service) {
-        this.accessory.removeService(service);
-      }
-    }
-    if (this.showFanAutoSwitch) {
-      this.fanAutoSwitchService = this.accessory.getService('fanAutoSwitch') ||
-        this.accessory.addService(this.platform.Service.Switch, 'fanAutoSwitch', 'switch-3');
-      accessoryName = capitalizeName ?  ' Fan Auto' : ' fan auto';
-      // this.fanAutoSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
-      setName(this, this.fanAutoSwitchService, this.Name + accessoryName);
-
-      this.fanAutoSwitchService.getCharacteristic(this.platform.Characteristic.On)
-        .onSet(this.setFanAutoSwitchOnState.bind(this))
-        .onGet(this.getFanAutoSwitchOnState.bind(this));
-    } else {
-      const service = this.accessory.getService('fanAutoSwitch');
-      if (service) {
-        this.accessory.removeService(service);
-      }
-    }
-    if (this.showLightAutoSwitch) {
-      this.lightAutoSwitchService = this.accessory.getService('lightAutoSwitch') ||
-        this.accessory.addService(this.platform.Service.Switch, 'lightAutoSwitch', 'switch-4');
-      accessoryName = capitalizeName ?  ' Light Auto' : ' light auto';
-      // this.lightAutoSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
-      setName(this, this.lightAutoSwitchService, this.Name + accessoryName);
-
-      this.lightAutoSwitchService.getCharacteristic(this.platform.Characteristic.On)
-        .onSet(this.setLightAutoSwitchOnState.bind(this))
-        .onGet(this.getLightAutoSwitchOnState.bind(this));
-    } else {
-      const service = this.accessory.getService('lightAutoSwitch');
-      if (service) {
-        debugLog(this, 'light', 1, 'removeService: lightAutoSwitch');
-        this.accessory.removeService(service);
-      }
-    }
-    if (this.showEcoModeSwitch) {
-      this.ecoModeSwitchService = this.accessory.getService('ecoModeSwitch') ||
-        this.accessory.addService(this.platform.Service.Switch, 'ecoModeSwitch', 'switch-5');
-      accessoryName = capitalizeName ?  ' Eco Mode' : ' eco mode';
-      // this.ecoModeSwitchService.setCharacteristic(this.platform.Characteristic.Name, this.Name + accessoryName);
-      setName(this, this.ecoModeSwitchService, this.Name + accessoryName);
-
-      this.ecoModeSwitchService.getCharacteristic(this.platform.Characteristic.On)
-        .onSet(this.setEcoModeSwitchOnState.bind(this))
-        .onGet(this.getEcoModeSwitchOnState.bind(this));
-    } else {
-      const service = this.accessory.getService('ecoModeSwitch');
-      if (service) {
-        this.accessory.removeService(service);
-      }
-    }
-
-    if (this.showFanOccupancySensor) {
-      this.fanOccupancySensorService = this.accessory.getService('fanOccupancySensor') ||
-        this.accessory.addService(this.platform.Service.OccupancySensor, 'fanOccupancySensor', 'occupancySensor-1');
-      accessoryName = capitalizeName ?  ' Occupancy' : ' fan occupancy';
-      setName(this, this.fanOccupancySensorService, this.Name + accessoryName);
-
-      this.fanOccupancySensorService.getCharacteristic(this.platform.Characteristic.OccupancyDetected)
-        .onGet(this.handleFanOccupancyDetectedGet.bind(this));
-    } else {
-      const service = this.accessory.getService('fanOccupancySensor');
-      if (service) {
-        this.accessory.removeService(service);
-      }
-    }
-
-    if (this.showLightOccupancySensor) {
-      this.lightOccupancySensorService = this.accessory.getService('lightOccupancySensor') ||
-        this.accessory.addService(this.platform.Service.OccupancySensor, 'lightOccupancySensor', 'occupancySensor-2');
-      accessoryName = capitalizeName ?  ' Light Occupancy' : ' light occupancy';
-      setName(this, this.lightOccupancySensorService, this.Name + accessoryName);
-
-      this.lightOccupancySensorService.getCharacteristic(this.platform.Characteristic.OccupancyDetected)
-        .onGet(this.handleLightOccupancyDetectedGet.bind(this));
-    } else {
-      const service = this.accessory.getService('lightOccupancySensor');
-      if (service) {
-        this.accessory.removeService(service);
-      }
     }
 
     /**
@@ -546,6 +350,9 @@ export class BigAssFans_i6PlatformAccessory {
     if (this.bulbCount === 2) {
       clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_UP, 0xc0])), this);
     } else if (this.Model === 'es6')  { // es6 with one light - temporary(!?) hack to debug issue #20
+      // don't know if this issue is limited to the es6 but the network/11 dumps from issue #20 show the MultipleLightMode property
+      //  has a value of "1" which means "Downlight".  But the fan in question only has an uplight.  But apparently it thinks it's a
+      //  downlight, so we'll go with that.
       clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, this.targetBulb, 0xc0])), this);
     }
 
@@ -569,7 +376,7 @@ export class BigAssFans_i6PlatformAccessory {
     if (this.bulbCount === 2) {
       clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_UP, 0xc0])), this);
     }
-    if (this.Model === 'es6')  { // temporary(!?) hack to debug issue #20
+    if (this.Model === 'es6')  { // temporary(!?) hack to debug issue #20, see setUpLightOnState()
       clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, this.targetBulb, 0xc0])), this);
     }
 
@@ -802,7 +609,7 @@ export class BigAssFans_i6PlatformAccessory {
 
   async handleLightOccupancyDetectedGet(): Promise<CharacteristicValue> {
     const occupancy = this.lightOccupancyDetected;
-    debugLog(this, ['newcode', 'characteristics'], [2, 3], 'Get Characteristic Light Occupancy Detected -> ' + occupancy);
+    debugLog(this, 'characteristics', 3, 'Get Characteristic Light Occupancy Detected -> ' + occupancy);
     return occupancy;
   }
 
@@ -815,13 +622,281 @@ export class BigAssFans_i6PlatformAccessory {
 
   async getUVCSwitchOnState(): Promise<CharacteristicValue> {
     const isOn = this.UVCSwitchOn;
-    debugLog(this, ['newcode', 'characteristics'], [2, 3], 'Get Characteristic UVC Switch On -> ' + isOn);
+    debugLog(this, 'characteristics', 3, 'Get Characteristic UVC Switch On -> ' + isOn);
     return isOn;
   }
 }
 
+function makeServices(pA: BAF) {
+  const capitalizeName = pA.Name[0] === pA.Name[0].toUpperCase();
+  let accessoryName:string;
+
+  pA.accessory.getService(pA.platform.Service.AccessoryInformation)!
+    .setCharacteristic(pA.platform.Characteristic.Manufacturer, 'Big Ass Fans')
+    .setCharacteristic(pA.platform.Characteristic.SerialNumber, pA.MAC);
+
+  // fan
+  if (pA.capabilities.hasFan) {
+    pA.fanService = pA.accessory.getService(pA.platform.Service.Fan) ||
+      pA.accessory.addService(pA.platform.Service.Fan);
+    // pA.fanService.setCharacteristic(pA.platform.Characteristic.Name, pA.Name);
+    setName(pA, pA.fanService, pA.Name);
+
+    pA.fanService.getCharacteristic(pA.platform.Characteristic.On)
+      .onSet(pA.setFanOnState.bind(pA))
+      .onGet(pA.getFanOnState.bind(pA));
+
+    pA.fanService.getCharacteristic(pA.platform.Characteristic.RotationSpeed)
+      .onSet(pA.setRotationSpeed.bind(pA))
+      .onGet(pA.getRotationSpeed.bind(pA));
+
+    if (pA.disableDirectionControl) {
+      // Am commenting out pA 'removeCharacteristic' line because it doesn't remove the control anyway.
+      // It's just as well since fanRotationDirection() lets the user know if the direction changes via remote or BAF app.
+      // pA.fanService.removeCharacteristic(pA.fanService.getCharacteristic(pA.platform.Characteristic.RotationDirection));
+    } else {
+      pA.fanService.getCharacteristic(pA.platform.Characteristic.RotationDirection)
+        .onSet(pA.setRotationDirection.bind(pA))
+        .onGet(pA.getRotationDirection.bind(pA));
+    }
+
+    if (pA.showWhooshSwitch) {
+      pA.whooshSwitchService = pA.accessory.getService('whooshSwitch') ||
+        pA.accessory.addService(pA.platform.Service.Switch, 'whooshSwitch', 'switch-1');
+      accessoryName = capitalizeName ?  ' Whoosh' : ' whoosh';
+      // pA.whooshSwitchService.setCharacteristic(pA.platform.Characteristic.Name, pA.Name + accessoryName);
+      setName(pA, pA.whooshSwitchService, pA.Name + accessoryName);
+
+      pA.whooshSwitchService.getCharacteristic(pA.platform.Characteristic.On)
+        .onSet(pA.setWhooshSwitchOnState.bind(pA))
+        .onGet(pA.getWhooshSwitchOnState.bind(pA));
+    } else {
+      const service = pA.accessory.getService('whooshSwitch');
+      if (service) {
+        pA.accessory.removeService(service);
+      }
+    }
+    if (pA.showDimToWarmSwitch) {
+      pA.dimToWarmSwitchService = pA.accessory.getService('dimToWarmSwitch') ||
+        pA.accessory.addService(pA.platform.Service.Switch, 'dimToWarmSwitch', 'switch-2');
+      accessoryName = capitalizeName ?  ' Dim to Warm' : ' dim to warm';
+      // pA.dimToWarmSwitchService.setCharacteristic(pA.platform.Characteristic.Name, pA.Name + accessoryName);
+      setName(pA, pA.dimToWarmSwitchService, pA.Name + accessoryName);
+
+      pA.dimToWarmSwitchService.getCharacteristic(pA.platform.Characteristic.On)
+        .onSet(pA.setDimToWarmSwitchOnState.bind(pA))
+        .onGet(pA.getDimToWarmSwitchOnState.bind(pA));
+    } else {
+      const service = pA.accessory.getService('dimToWarmSwitch');
+      if (service) {
+        pA.accessory.removeService(service);
+      }
+    }
+    if (pA.showFanAutoSwitch) {
+      pA.fanAutoSwitchService = pA.accessory.getService('fanAutoSwitch') ||
+        pA.accessory.addService(pA.platform.Service.Switch, 'fanAutoSwitch', 'switch-3');
+      accessoryName = capitalizeName ?  ' Fan Auto' : ' fan auto';
+      // pA.fanAutoSwitchService.setCharacteristic(pA.platform.Characteristic.Name, pA.Name + accessoryName);
+      setName(pA, pA.fanAutoSwitchService, pA.Name + accessoryName);
+
+      pA.fanAutoSwitchService.getCharacteristic(pA.platform.Characteristic.On)
+        .onSet(pA.setFanAutoSwitchOnState.bind(pA))
+        .onGet(pA.getFanAutoSwitchOnState.bind(pA));
+    } else {
+      const service = pA.accessory.getService('fanAutoSwitch');
+      if (service) {
+        pA.accessory.removeService(service);
+      }
+    }
+  }
+
+  if (pA.capabilities.hasOccupancySensor) {
+    if (pA.showFanOccupancySensor) {
+      pA.fanOccupancySensorService = pA.accessory.getService('fanOccupancySensor') ||
+        pA.accessory.addService(pA.platform.Service.OccupancySensor, 'fanOccupancySensor', 'occupancySensor-1');
+      accessoryName = capitalizeName ?  ' Occupancy' : ' fan occupancy';
+      setName(pA, pA.fanOccupancySensorService, pA.Name + accessoryName);
+
+      pA.fanOccupancySensorService.getCharacteristic(pA.platform.Characteristic.OccupancyDetected)
+        .onGet(pA.handleFanOccupancyDetectedGet.bind(pA));
+    } else {
+      const service = pA.accessory.getService('fanOccupancySensor');
+      if (service) {
+        pA.accessory.removeService(service);
+      }
+    }
+    if (pA.showLightOccupancySensor) {
+      pA.lightOccupancySensorService = pA.accessory.getService('lightOccupancySensor') ||
+        pA.accessory.addService(pA.platform.Service.OccupancySensor, 'lightOccupancySensor', 'occupancySensor-2');
+      accessoryName = capitalizeName ?  ' Light Occupancy' : ' light occupancy';
+      setName(pA, pA.lightOccupancySensorService, pA.Name + accessoryName);
+
+      pA.lightOccupancySensorService.getCharacteristic(pA.platform.Characteristic.OccupancyDetected)
+        .onGet(pA.handleLightOccupancyDetectedGet.bind(pA));
+    } else {
+      const service = pA.accessory.getService('lightOccupancySensor');
+      if (service) {
+        pA.accessory.removeService(service);
+      }
+    }
+  }
+
+  // downlight
+  if (pA.capabilities.hasLight) {
+    if (pA.noLights) {
+      hbLog.info(`${pA.Name} downlight disabled by configuration "noLights: true"`);
+      const service = pA.accessory.getService('downlight');
+      if (service) {
+        pA.accessory.removeService(service);
+      }
+    } else {
+      pA.downlightBulbService = pA.accessory.getService(pA.platform.Service.Lightbulb) ||
+        pA.accessory.getService('downlight') ||
+        pA.accessory.addService(pA.platform.Service.Lightbulb, 'downlight', 'light-1');
+      setName(pA, pA.downlightBulbService, pA.Name + capitalizeName ? ' Light' : ' light');
+
+      pA.downlightBulbService.getCharacteristic(pA.platform.Characteristic.On)
+        .onSet(pA.setDownLightOnState.bind(pA))
+        .onGet(pA.getDownLightOnState.bind(pA));
+
+      pA.downlightBulbService.getCharacteristic(pA.platform.Characteristic.Brightness)
+        .onSet(pA.setDownBrightness.bind(pA))
+        .onGet(pA.getDownBrightness.bind(pA));
+
+      if (pA.capabilities.hasColorTempControl) {
+        pA.downlightBulbService.getCharacteristic(pA.platform.Characteristic.ColorTemperature)
+          .onSet(pA.setDownColorTemperature.bind(pA))
+          .onGet(pA.getDownColorTemperature.bind(pA));
+      }
+
+      pA.bulbCount++;
+    }
+  }
+
+  // uplight
+  if (pA.capabilities.hasUplight) {
+    if (pA.noLights) {
+      hbLog.info(`${pA.Name} uplight disabled by configuration "noLights: true"`);
+      const service = pA.accessory.getService('uplight');
+      if (service) {
+        pA.accessory.removeService(service);
+      }
+    } else {
+      pA.uplightBulbService = pA.accessory.getService('uplight') ||
+        pA.accessory.addService(pA.platform.Service.Lightbulb, 'uplight', 'light-2');
+      setName(pA, pA.uplightBulbService, pA.Name + (capitalizeName ? ' Uplight' : ' uplight'));
+
+      pA.uplightBulbService.getCharacteristic(pA.platform.Characteristic.On)
+        .onSet(pA.setUpLightOnState.bind(pA))
+        .onGet(pA.getUpLightOnState.bind(pA));
+
+      pA.uplightBulbService.getCharacteristic(pA.platform.Characteristic.Brightness)
+        .onSet(pA.setUpBrightness.bind(pA))
+        .onGet(pA.getUpBrightness.bind(pA));
+
+      // pA.uplightBulbService.getCharacteristic(pA.platform.Characteristic.ColorTemperature)
+      // .onSet(pA.setUpColorTemperature.bind(pA))
+      // .onGet(pA.getUpColorTemperature.bind(pA));
+
+      pA.bulbCount++;
+    }
+  }
+
+
+  if (pA.capabilities.hasUVCLight) {
+    if (pA.noLights) {
+      hbLog.info(`${pA.Name} UVC light disabled by configuration "noLights: true"`);
+    } else {
+      if (pA.UVCSwitchService === undefined) {
+        pA.UVCSwitchService = pA.accessory.getService('UVCSwitch') ||
+          pA.accessory.addService(pA.platform.Service.Switch, 'UVCSwitch', 'switch-6');
+        setName(pA, pA.UVCSwitchService, pA.Name + ' UVC');
+
+        pA.UVCSwitchService.getCharacteristic(pA.platform.Characteristic.On)
+          .onSet(pA.setUVCSwitchOnState.bind(pA))
+          .onGet(pA.getUVCSwitchOnState.bind(pA));
+      }
+    }
+  }
+
+  // Current Temperature
+  if (pA.capabilities.hasTempSensor) {
+    if (pA.accessory.context.device.showTemperature === undefined || pA.accessory.context.device.showTemperature !== false) {
+      pA.temperatureSensorService = pA.accessory.getService(pA.platform.Service.TemperatureSensor) ||
+        pA.accessory.addService(pA.platform.Service.TemperatureSensor);
+      accessoryName = capitalizeName ?  ' Temperature' : ' temperature';
+      // pA.temperatureSensorService.setCharacteristic(pA.platform.Characteristic.Name, pA.Name + accessoryName);
+      setName(pA, pA.temperatureSensorService, pA.Name + accessoryName);
+      pA.temperatureSensorService.getCharacteristic(pA.platform.Characteristic.CurrentTemperature)
+        .onGet(pA.getCurrentTemperature.bind(pA));
+    } else {
+      const service = pA.accessory.getService(pA.platform.Service.TemperatureSensor);
+      if (service) {
+        pA.accessory.removeService(service);
+      }
+    }
+  }
+
+  // Current Relative Humidity
+  if (pA.capabilities.hasHumiditySensor) {
+    if (pA.accessory.context.device.showHumidity === undefined || pA.accessory.context.device.showHumidity !== false) {
+      pA.humiditySensorService = pA.accessory.getService(pA.platform.Service.HumiditySensor) ||
+        pA.accessory.addService(pA.platform.Service.HumiditySensor);
+      accessoryName = capitalizeName ?  ' Humidity' : ' humidity';
+      // pA.humiditySensorService.setCharacteristic(pA.platform.Characteristic.Name, pA.Name + accessoryName);
+      setName(pA, pA.humiditySensorService, pA.Name + accessoryName);
+
+      pA.humiditySensorService.getCharacteristic(pA.platform.Characteristic.CurrentRelativeHumidity)
+        .onGet(pA.getCurrentRelativeHumidity.bind(pA));
+    } else {
+      const service = pA.accessory.getService(pA.platform.Service.HumiditySensor);
+      if (service) {
+        pA.accessory.removeService(service);
+      }
+    }
+  }
+
+  if (pA.showLightAutoSwitch) {
+    pA.lightAutoSwitchService = pA.accessory.getService('lightAutoSwitch') ||
+      pA.accessory.addService(pA.platform.Service.Switch, 'lightAutoSwitch', 'switch-4');
+    accessoryName = capitalizeName ?  ' Light Auto' : ' light auto';
+    // pA.lightAutoSwitchService.setCharacteristic(pA.platform.Characteristic.Name, pA.Name + accessoryName);
+    setName(pA, pA.lightAutoSwitchService, pA.Name + accessoryName);
+
+    pA.lightAutoSwitchService.getCharacteristic(pA.platform.Characteristic.On)
+      .onSet(pA.setLightAutoSwitchOnState.bind(pA))
+      .onGet(pA.getLightAutoSwitchOnState.bind(pA));
+  } else {
+    const service = pA.accessory.getService('lightAutoSwitch');
+    if (service) {
+      debugLog(pA, 'light', 1, 'removeService: lightAutoSwitch');
+      pA.accessory.removeService(service);
+    }
+  }
+
+  if (pA.capabilities.hasEcoMode) {
+    if (pA.showEcoModeSwitch) {
+      pA.ecoModeSwitchService = pA.accessory.getService('ecoModeSwitch') ||
+        pA.accessory.addService(pA.platform.Service.Switch, 'ecoModeSwitch', 'switch-5');
+      accessoryName = capitalizeName ?  ' Eco Mode' : ' eco mode';
+      // pA.ecoModeSwitchService.setCharacteristic(pA.platform.Characteristic.Name, pA.Name + accessoryName);
+      setName(pA, pA.ecoModeSwitchService, pA.Name + accessoryName);
+
+      pA.ecoModeSwitchService.getCharacteristic(pA.platform.Characteristic.On)
+        .onSet(pA.setEcoModeSwitchOnState.bind(pA))
+        .onGet(pA.getEcoModeSwitchOnState.bind(pA));
+    } else {
+      const service = pA.accessory.getService('ecoModeSwitch');
+      if (service) {
+        pA.accessory.removeService(service);
+      }
+    }
+  }
+}
+
 /**
-* connect to the fan, send an initialization message, establish the error and data callbacks and start a keep-alive interval timer.
+* connect to the fan, send capability query and initialization message,
+* establish the error and data callbacks and start a keep-alive interval timer.
 */
 import net = require('net');
 
@@ -844,28 +919,26 @@ function networkSetup(pA: BAF) {
     }, pA.ProbeFrequency);
   }
 
-  pA.client = net.connect(31415, pA.IP, () => {
+  const connectOptions = {port: 31415, host: pA.IP, family: 4}
+  pA.client = net.connect(connectOptions, () => {
     debugLog(pA, 'progress', 2, 'connected!');
     pA.client.setKeepAlive(true);
-
+    clientWrite(pA.client, Buffer.from([0xc0, 0x12, 0x04, 0x1a, 0x02, 0x08, 0x06, 0xc0]), pA);
     clientWrite(pA.client, Buffer.from([0xc0, 0x12, 0x02, 0x1a, 0x00, 0xc0]), pA);
+
   });
 
   let errHandler;
-  let backOffSecs = 2;
-  const maxBackOffSecs = 3600;
+  let retryCount = 0;
 
   pA.client.on('error', errHandler = (err) => {
-    debugLog(pA, 'newcode', 1, err.message);
+    debugLog(pA, 'reconnect', 1, err.message);
 
-    let retryMillisconds = 1000 * backOffSecs;
+    const retrySeconds = backOff(err.code, retryCount);
     switch (err.code) {
-      case 'ETIMEDOUT':
-        hbLog.error(`${pA.Name} (${pA.IP}) connection timed out ${err.code}.  Check your fan has power and the correct IP in json.config.`);
-        return;
       case 'ECONNREFUSED':
         hbLog.error(`${pA.Name} (${pA.IP}) connection refused ${err.code}.  Check that the correct IP is in json.config.`);
-        // why clearInterval here but not in the other cases that return
+        // why clearInterval here but not in the other case that returns
         if (pA.probeTimeout !== undefined) {
           clearInterval(pA.probeTimeout);
         }
@@ -874,55 +947,41 @@ function networkSetup(pA: BAF) {
         hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' is unreachable [ENETUNREACH].  Check the correct IP is in json.config.');
         return;
 
-      case 'EHOSTDOWN':
-        hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' connection problem [EHOSTDOWN].  Attempting reconnect in one minute.');
-        retryMillisconds = 60000;
+      case 'ETIMEDOUT':
+        hbLog.error(`${pA.Name} (${pA.IP}) connection timed out [${err.code}].\n` +
+          `Check your fan has power and the correct IP in json.config. Will retry in ${retrySeconds} seconds.`);
         break;
+      case 'EHOSTDOWN': {
+        const minutes = Math.round(retrySeconds / 60);
+        hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' connection problem [EHOSTDOWN].' +
+          `Attempting reconnect in ${minutes} ${minutes === 1 ? 'minute.' : 'minutes.'}`);
+        break;
+      }
       case 'ECONNRESET':
-        hbLog.warn(`${pA.Name} (${pA.IP}) network connection reset ${err.code}.  Attempting reconnect in ${backOffSecs} seconds.`);
+        // noticed 7/17/2023 there is an ECONNRESET every two hours.
+        debugLog(pA, 'reconnect', 1,
+          `${pA.Name} (${pA.IP}) network connection reset ${err.code}.  Attempting reconnect in ${retrySeconds} seconds.`);
+        debugLog(pA, 'reconnect', 1, `uptime: ${toDaysHoursMinutesString(pA.uptimeMinutes)}`);
         break;
       case 'EPIPE':
-        hbLog.warn(`${pA.Name} (${pA.IP}) network connection broke ${err.code}.  Attempting reconnect in ${backOffSecs} seconds.`);
+        hbLog.warn(`${pA.Name} (${pA.IP}) network connection broke ${err.code}.  Attempting reconnect in ${retrySeconds} seconds.`);
         break;
 
       default:
-        hbLog.warn(`${pA.Name} (${pA.IP}) : Unhandled network error: ${err.code}.  Attempting reconnect in ${backOffSecs} seconds.`);
+        hbLog.warn(`${pA.Name} (${pA.IP}) : Unhandled network error: ${err.code}.  Attempting reconnect in ${retrySeconds} seconds.`);
         break;
     }
 
-    // if (err.code === 'ECONNRESET') {
-    //   hbLog.warn(`${pA.Name} (${pA.IP}) network connection reset ${err.code}.  Attempting reconnect in ${backOffSecs} seconds.`);
-    // } else if (err.code === 'EPIPE') {
-    //   hbLog.warn(pA.Name + ' (' + pA.IP + ')' + ' network connection broke [EPIPE].  Attempting reconnect in 2 seconds.');
-    // } else if (err.code === 'ETIMEDOUT') {
-    //   hbLog.error(`${pA.Name} (${pA.IP}) connection timed out [ETIMEDOUT]. Check your fan has power and the correct IP in json.config.`);
-    //   return;
-    // } else if (err.code === 'ECONNREFUSED') {
-    //   hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' connection refused [ECONNREFUSED].  Check that the correct IP is in json.config.');
-    //   if (pA.probeTimeout !== undefined) {
-    //     clearInterval(pA.probeTimeout);
-    //   }
-    //   return;
-    // } else if (err.code === 'ENETUNREACH') {
-    //   hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' is unreachable [ENETUNREACH].  Check the correct IP is in json.config.');
-    //   return;
-    // } else if (err.code === 'EHOSTDOWN') {
-    //   hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' connection problem [EHOSTDOWN].  Attempting reconnect in one minute.');
-    //   retryMillisconds = 60000;
-    // } else {
-    //   hbLog.warn(pA.Name + ' (' + pA.IP + ')' + ': Unhandled network error: ' + err.code + '.  Attempting reconnect in 2 seconds.');
-    // }
-
-    backOffSecs = backOffSecs * 2;
-    if (backOffSecs >= maxBackOffSecs) {
-      backOffSecs = maxBackOffSecs;
-    }
+    retryCount++;
     pA.client = undefined;
     setTimeout(() => {
       // already did this one or more times, don't need to send initilization message
-      pA.client = net.connect(31415, pA.IP, () => {
-        backOffSecs = 2;
-        hbLog.info(pA.Name + ' reconnected!');
+      pA.client = net.connect(connectOptions, () => {
+        retryCount = 0;
+        if (err.code !== 'ECONNRESET') { // ECONNRESETs seem pretty normal and regular
+          hbLog.info(pA.Name + ' reconnected!');
+        }
+        debugLog(pA, 'reconnect', 1, `reconnected after [${err.code}]`);
       });
       pA.client.on('error', (err) => {
         errHandler(err);
@@ -930,7 +989,7 @@ function networkSetup(pA: BAF) {
       pA.client.on('data', (data) => {
         onData(pA, data);
       });
-    }, retryMillisconds);
+    }, retrySeconds);
   });
 
   pA.client.on('data', (data: Buffer) => {
@@ -954,12 +1013,26 @@ function networkSetup(pA: BAF) {
           }
         } else {
           s = s.replace('\n', '');
-          const a = s.split(', ');
-          if ((typeof pA.debugLevels[a[0]]) === 'number') {
-            pA.debugLevels[a[0]] = Number(a[1]);
-            c.write(`${a[0]} set to ${Number(a[1])}\n`);
+
+          if (s === '?') {
+            c.write('p uptime or <debug key> <debug level> [enter new line for list]\n');
+          } else if (s.startsWith('p')) {
+            switch (s) {
+              case 'p uptime':
+                c.write(`uptime: ${toDaysHoursMinutesString(pA.uptimeMinutes)}\n`);
+                break;
+              default:
+                break;
+            }
           } else {
-            c.write(`"${a[0]}" is not valid\n`);
+            const a = s.split(', ');
+
+            if ((typeof pA.debugLevels[a[0]]) === 'number') {
+              pA.debugLevels[a[0]] = Number(a[1]);
+              c.write(`${a[0]} set to ${Number(a[1])}\n`);
+            } else {
+              c.write(`"${a[0]}" is not valid\n`);
+            }
           }
         }
       });
@@ -969,6 +1042,30 @@ function networkSetup(pA: BAF) {
       const info = srv.address() as net.AddressInfo;
       hbLog.info(`${pA.Name} - plugin listening for debugging commands on port: ${info.port}`);
     });
+  }
+}
+
+const timedOutBackOff = [5, 5, 5, 600, 1800, 3600, 21600, 432000, 86400];
+function backOff(errorMsgString: string, retryCount: number) : number {
+  switch (errorMsgString) {
+    case 'ETIMEDOUT':
+      if (retryCount >= timedOutBackOff.length) {
+        return timedOutBackOff[timedOutBackOff.length - 1];
+      } else {
+        return timedOutBackOff[retryCount];
+      }
+    case 'EHOSTDOWN':
+      return 60 * (1 + retryCount);
+    case 'ECONNRESET':
+      if (retryCount <= 5) {
+        return 2;
+      } else if (retryCount <= 24) {
+        return 60;
+      } else {
+        return 86400;
+      }
+    default:
+      return 2;
   }
 }
 
@@ -1010,10 +1107,13 @@ function onData(pA: BAF, data: Buffer) {
 
     const funStack: funCall[] = buildFunStack(unstuff(chunks[i]), pA);
     debugLog(pA, 'funstack', (funStack.length === 0) ? 2 : 1, `funstack.length: ${funStack.length}`);
-    funStack.forEach((value) => {
-      debugLog(pA, 'funstack', 1, `  ${value[0].name}(${value[1]})`);
-      value[0](value[1], pA);
-    });
+    debugLog(pA, 'funstack', 1, `pA.capabilitiesEstablished: ${pA.capabilitiesEstablished}`);
+    if (pA.capabilitiesEstablished) {
+      funStack.forEach((value) => {
+        debugLog(pA, 'funstack', 1, `  ${value[0].name}(${value[1]})`);
+        value[0](value[1], pA);
+      });
+    }
   }
 }
 
@@ -1049,110 +1149,6 @@ function setName(pA: BAF, service: Service, name: string) {
 * property handler functions
 */
 
-function UVCPresent(s: string, pA: BAF) {
-  if (pA.noLights) {
-    return;
-  }
-  const value = Number(s);
-  if (value) {
-    if (pA.UVCSwitchService === undefined) {
-      // if (pA.accessory.getService('UVCSwitch') === undefined) {
-      //   debugLog(pA, 'newcode', 2, 'add service: \'UVCSwitch\', \'switch-6\'');
-      // } else {
-      //   debugLog(pA, 'newcode', 2, 'use service: \'UVCSwitch\'');
-      // }
-
-      pA.UVCSwitchService = pA.accessory.getService('UVCSwitch') ||
-        pA.accessory.addService(pA.platform.Service.Switch, 'UVCSwitch', 'switch-6');
-      setName(pA, pA.UVCSwitchService, pA.Name + ' UVC');
-
-      pA.UVCSwitchService.getCharacteristic(pA.platform.Characteristic.On)
-        .onSet(pA.setUVCSwitchOnState.bind(pA))
-        .onGet(pA.getUVCSwitchOnState.bind(pA));
-    // } else {
-    //   debugLog(pA, 'newcode', 2, 'UVCPresent() pA.UVCSwitchService !== undefined');
-    }
-  // } else {
-  //   debugLog(pA, 'redflag', 1, `UVCPresent called wiith value: ${value}`);
-  }
-}
-
-function bulbsPresent(pA:BAF, downlightPresent:boolean, uplightPresent:boolean) {
-  pA.bulbCount = 0;
-
-  if (downlightPresent) {
-    pA.bulbCount++;
-    infoLogOnce(pA, 'downlight presented');
-    debugLog(pA, 'light', 1, 'downlight presented');
-  } else {
-    infoLogOnce(pA, 'no downlight presented');
-    debugLog(pA, 'light', 1, 'no downlight presented');
-
-    let service = pA.accessory.getService(pA.platform.Service.Lightbulb);
-    if (service) {
-      debugLog(pA, 'light', 1, 'remove platform.Service.Lightbulb');
-      pA.accessory.removeService(service);
-    }
-
-    service = pA.accessory.getService('downlight');
-    if (service) {
-      debugLog(pA, 'light', 1, 'remove service: \'downlight\'');
-      pA.accessory.removeService(service);
-    }
-  }
-
-  if (uplightPresent) {
-    pA.bulbCount++;
-    debugLog(pA, 'light', 1, 'uplight presented');
-    infoLogOnce(pA, 'uplight presented');
-
-    // Uplight Bulb was not pre-instantiated so we do it here if we haven't already done it.
-    if (!pA.accessory.getService('uplight')) {
-      debugLog(pA, 'light', 1, 'add service: \'uplight\'');
-      pA.uplightBulbService = pA.accessory.addService(pA.platform.Service.Lightbulb, 'uplight', 'light-2');
-      const capitalizeName = pA.Name[0] === pA.Name[0].toUpperCase();
-      debugLog(pA, 'light', 1, `uplight name is ${pA.Name + (capitalizeName ? ' Uplight' : ' uplight')}`);
-      // pA.uplightBulbService.setCharacteristic(pA.platform.Characteristic.Name, pA.Name + (capitalizeName ? ' Uplight' : ' uplight'));
-      setName(pA, pA.uplightBulbService, pA.Name + (capitalizeName ? ' Uplight' : ' uplight'));
-
-      pA.uplightBulbService.getCharacteristic(pA.platform.Characteristic.On)
-        .onSet(pA.setUpLightOnState.bind(pA))
-        .onGet(pA.getUpLightOnState.bind(pA));
-
-      pA.uplightBulbService.getCharacteristic(pA.platform.Characteristic.Brightness)
-        .onSet(pA.setUpBrightness.bind(pA))
-        .onGet(pA.getUpBrightness.bind(pA));
-
-      // pA.uplightBulbService.getCharacteristic(pA.platform.Characteristic.ColorTemperature)
-      // .onSet(pA.setUpColorTemperature.bind(pA))
-      // .onGet(pA.getUpColorTemperature.bind(pA));
-    }
-  } else {
-    infoLogOnce(pA, 'no uplight presented');
-    debugLog(pA, 'light', 1, 'no uplight presented');
-    const service = pA.accessory.getService('uplight');
-    if (service) {
-      debugLog(pA, 'light', 1, 'remove service: \'uplight\'');
-      pA.accessory.removeService(service);
-    }
-  }
-}
-function bulbsPresent2(s: string, pA: BAF) {
-  if (pA.noLights) {
-    return;
-  }
-
-  const a=s.split(',');
-  if (pA.Model !== MODEL_HAIKU_L) {
-    bulbsPresent(pA, a[0]==='true', a[1]==='true');
-  } else {
-    // if (a[1] === 'true') {
-    //   debugLog(pA, 'newcode', 1, 'Thwarting Haiku L attempt to assert existence of an uplight');
-    // }
-    bulbsPresent(pA, Boolean(a[0]=== 'true'), false);
-  }
-}
-
 function productType(value:string, pA:BAF) {
   const regex = /[ -~]/g;  // count the printable characters
   const found = value.match(regex);
@@ -1173,32 +1169,6 @@ function productType(value:string, pA:BAF) {
 
     pA.accessory.getService(pA.platform.Service.AccessoryInformation)!
       .setCharacteristic(pA.platform.Characteristic.Model, pA.Model);
-
-    if (pA.Model === MODEL_HAIKU_HI || pA.Model === MODEL_HAIKU_L) {
-      const service = pA.accessory.getService(pA.platform.Service.HumiditySensor);
-      if (service) {
-        pA.accessory.removeService(service);
-      }
-    }
-
-    if (pA.Model === MODEL_HAIKU_L) {
-      const service = pA.accessory.getService(pA.platform.Service.TemperatureSensor);
-      if (service) {
-        pA.accessory.removeService(service);
-      }
-    }
-
-
-    if (pA.noLights) {
-      return;
-    }
-
-    if (pA.Model === MODEL_HAIKU_HI || pA.Model === MODEL_HAIKU_L) {
-      // this.lightBulbService.getCharacteristic(this.platform.Characteristic.ColorTemperature)
-      //   .removeAllListeners('set')
-      //   .removeAllListeners('get');
-      pA.downlightBulbService.removeCharacteristic(pA.downlightBulbService.getCharacteristic(pA.platform.Characteristic.ColorTemperature));
-    }
   }
 }
 
@@ -1218,22 +1188,21 @@ function firmwareVersion(value:string, pA: BAF) {
 }
 
 function setTargetBulb(s: string, pA:BAF) {
-  if (pA.noLights) {
-    return;
-  }
+  // if (pA.noLights) {
+  //   return;
+  // }
 
-  if (pA.Model === MODEL_HAIKU_L) { // Haiku L Series only can only have one light
-    pA.targetBulb = TARGETLIGHT_DOWN;
-  } else {
-    const value = Number(s);
-    // debugLog(pA, ['newcode', 'light'], [2, 1], 'setTargetBulb: ' + value);
-    pA.targetBulb = value;
-
-  }
+  // if (pA.Model === MODEL_HAIKU_L) { // Haiku L Series only can only have one light
+  //   pA.targetBulb = TARGETLIGHT_DOWN;
+  // } else {
+  const value = Number(s);
+  debugLog(pA, 'light', 1, 'setTargetBulb: ' + value);
+  pA.targetBulb = value;
+  // }
 }
 
 function lightColorTemperature(s: string, pA:BAF) {
-  if (pA.noLights) {
+  if (pA.noLights || !pA.capabilities.hasColorTempControl) {
     return;
   }
 
@@ -1256,15 +1225,13 @@ function lightColorTemperature(s: string, pA:BAF) {
 }
 function targetedColorTemperature(value:number, service:Service, states:lightStates, description:string, pA:BAF) {
   if (service === undefined) {
-    debugLog(pA, 'redflags', 1, `lightColorTemperature: no ${description} lightbulb Service`);
+    debugLog(pA, 'redflags', 1, `targetedColorTemperature: no ${description} lightbulb Service`);
     return;
   }
-  if (pA.Model !== MODEL_HAIKU_HI && pA.Model !== MODEL_HAIKU_L) {
-    states.ColorTemperature = value;
-    const mireds = Math.round(1000000 / states.ColorTemperature);
-    debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} ColorTemperature: ${mireds} (${states.ColorTemperature})`);
-    service.updateCharacteristic(pA.platform.Characteristic.ColorTemperature, mireds);
-  }
+  states.ColorTemperature = value;
+  const mireds = Math.round(1000000 / states.ColorTemperature);
+  debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} ColorTemperature: ${mireds} (${states.ColorTemperature})`);
+  service.updateCharacteristic(pA.platform.Characteristic.ColorTemperature, mireds);
 }
 
 function lightBrightness(s: string, pA:BAF) {
@@ -1366,6 +1333,7 @@ function targetedlightOnState(value:number, service:Service, states:lightStates,
       debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} light auto switch off: ` + pA.lightAutoSwitchOn);
       pA.lightAutoSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.lightAutoSwitchOn);
     }
+
   } else if (pA.showLightAutoSwitch && value === 2 && pA.lightAutoSwitchOn === false) {
     pA.lightAutoSwitchOn = true;
     debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} light auto switch on: ` + pA.lightAutoSwitchOn);
@@ -1425,6 +1393,10 @@ function fanRotationSpeed(s: string, pA:BAF) {
 }
 
 function currentTemperature(s: string, pA:BAF) {
+  if (!pA.capabilities.hasTempSensor) {
+    return;
+  }
+
   const value = Number(s);
   if (!pA.accessory.getService(pA.platform.Service.TemperatureSensor)) {
     debugLog(pA, 'redflags', 1, 'currentTemperature: no TemperatureSensor Service');
@@ -1453,6 +1425,10 @@ function currentTemperature(s: string, pA:BAF) {
 }
 
 function currentRelativeHumidity(s: string, pA:BAF) {
+  if (!pA.capabilities.hasHumiditySensor) {
+    return;
+  }
+
   const value = Number(s);
   debugLog(pA, 'humidity', 2, pA.Name + ' - CurrentRelativeHumidity:' + value);
 
@@ -1516,13 +1492,9 @@ function UVCOnState(s: string, pA:BAF) {
   const onValue = (value === 0 ? false : true);
   pA.UVCSwitchOn = onValue; // we do this even if there's no UVCSwitchService yet, so we can initialize it if/when it's created
 
-  // debugLog(pA, 'newcode', 2, `UVCOnState() onValue: ${onValue}`);
-
   if (pA.UVCSwitchService) {
-    // debugLog(pA, ['newcode', 'characteristics'], [2, 3], 'update UVC Mode:' + pA.UVCSwitchOn);
+    debugLog(pA, 'characteristics', 3, 'update UVC Mode:' + pA.UVCSwitchOn);
     pA.UVCSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.UVCSwitchOn);
-  // } else {
-  //   debugLog(pA, 'newcode', 2, `UVCOnState() pA.UVCSwitchService: ${pA.UVCSwitchService}`);
   }
 }
 
@@ -1531,7 +1503,7 @@ function fanOccupancyDetectedState(s: string, pA:BAF) {
   if (pA.showFanOccupancySensor) {
     const occupancy = (value === 0 ? false : true);
     pA.fanOccupancyDetected = occupancy;
-    // debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update Fan Occupancy:' + pA.fanOccupancyDetected);
+    debugLog(pA, ['occupancy', 'characteristics'], [1, 3], 'update Fan Occupancy:' + pA.fanOccupancyDetected);
     pA.fanOccupancySensorService.updateCharacteristic(pA.platform.Characteristic.OccupancyDetected, value);
   }
 }
@@ -1541,7 +1513,7 @@ function lightOccupancyDetectedState(s: string, pA:BAF) {
   if (pA.showLightOccupancySensor) {
     const occupancy = (value === 0 ? false : true);
     pA.lightOccupancyDetected = occupancy;
-    // debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update Light Occupancy:' + pA.lightOccupancyDetected);
+    debugLog(pA, ['occupancy', 'characteristics'], [1, 3], 'update Light Occupancy:' + pA.lightOccupancyDetected);
     pA.lightOccupancySensorService.updateCharacteristic(pA.platform.Characteristic.OccupancyDetected, value);
   }
 }
@@ -1750,6 +1722,24 @@ function getProtoElements(b: Buffer): [Buffer, number, number] {
 // 5	I32	fixed32, sfixed32, float
 
 type funCall = [((s: string, pA: BigAssFans_i6PlatformAccessory) => void), string];
+let debugLastFanOccupancyValue = 0;
+let debugLastLightOccupancyValue = 0;
+const rebootReasons = [
+  'zero entry',
+  'Unknown',
+  'Other',
+  'PowerOn',
+  'Software',
+  'IndependentWatchdog',
+  'TaskWatchdog',
+  'BrownOut',
+  'LowPower',
+  'Lockup',
+  'Pin',
+];
+let uptimeLogged = false;
+let lastRebootCount = 0;
+let showRebootReason = true;
 
 function buildFunStack(b:Buffer, pA: BAF): funCall[] {
   let type: number;
@@ -1783,88 +1773,121 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
             switch (field) {
               case 2: // product type/model
                 [b, s] = getString(b);
-                // productType(s, pA);
                 funStack.push([productType, s]);
                 break;
               case 7: // firmware version (sometimes zero-length?!)
                 [b, s] = getString(b);
-                // firmwareVersion(s, pA);
                 funStack.push([firmwareVersion, s]);
                 break;
               case 43:  // fan on/off/auto
                 [b, v] = getValue(b);
-                // fanOnState(v, pA);
-                funStack.push([fanOnState, String(v)]);
+                if (pA.capabilities.hasFan) {
+                  funStack.push([fanOnState, String(v)]);
+                }
                 break;
               case 44:  // rotation direction
                 [b, v] = getValue(b);
-                // fanRotationDirection(v, pA);
-                funStack.push([fanRotationDirection, String(v)]);
+                if (pA.capabilities.hasFan) {
+                  funStack.push([fanRotationDirection, String(v)]);
+                }
                 break;
               case 46:  // fan rotation speed
                 [b, v] = getValue(b);
-                // fanRotationSpeed(v, pA);
-                funStack.push([fanRotationSpeed, String(v)]);
+                if (pA.capabilities.hasFan) {
+                  funStack.push([fanRotationSpeed, String(v)]);
+                }
                 break;
               case 58:  // whoosh
                 [b, v] = getValue(b);
-                // whooshOnState(v, pA);
-                funStack.push([whooshOnState, String(v)]);
+                if (pA.capabilities.hasFan) {
+                  funStack.push([whooshOnState, String(v)]);
+                }
                 break;
               case 65:  // eco mode (haiku)
                 [b, v] = getValue(b);
-                // ecoModeOnState(v, pA);
-                funStack.push([ecoModeOnState, String(v)]);
+                if (pA.capabilities.hasEcoMode) {
+                  funStack.push([ecoModeOnState, String(v)]);
+                }
                 break;
               case 66:  // fan_occupancy_detected (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
                 [b, v] = getValue(b);
-                funStack.push([fanOccupancyDetectedState, String(v)]);
-                // debugLog(pA, 'newcode', 1, `fan occupancy: ${v} detected per field: ${field}`);
+                if (pA.capabilities.hasOccupancySensor) {
+                  funStack.push([fanOccupancyDetectedState, String(v)]);
+                }
+                if (v !== debugLastFanOccupancyValue) {
+                  debugLog(pA, 'occupancy', 1, `fan occupancy: ${v} detected per field: ${field}`);
+                }
+                debugLastFanOccupancyValue = v;
+                break;
+              case 67:  // fan on means auto
+                [b, v] = getValue(b);
+                if (v) {
+                  debugLog(pA, 'newcode', 1, `fan on means auto: ${v} field: ${field}`);
+                }
                 break;
               case 68:  // light on/off/auto
                 [b, v] = getValue(b);
-                // lightOnState(v, pA);
-                funStack.push([lightOnState, String(v)]);
+                if (pA.capabilities.hasLight) {
+                  funStack.push([lightOnState, String(v)]);
+                }
                 break;
               case 69:  // light brightness
                 [b, v] = getValue(b);
-                // lightBrightness(v, pA);
-                funStack.push([lightBrightness, String(v)]);
+                if (pA.capabilities.hasLight) {
+                  funStack.push([lightBrightness, String(v)]);
+                }
                 break;
               case 71:  // color temperature
                 [b, v] = getValue(b);
-                // lightColorTemperature(v, pA);
-                funStack.push([lightColorTemperature, String(v)]);
+                if (pA.capabilities.hasColorTempControl) {
+                  funStack.push([lightColorTemperature, String(v)]);
+                }
                 break;
               case 77:  // light dim to warm
                 [b, v] = getValue(b);
-                // dimToWarmOnState(v, pA);
-                funStack.push([dimToWarmOnState, String(v)]);
+                if (pA.capabilities.hasLight) {
+                  funStack.push([dimToWarmOnState, String(v)]);
+                }
                 break;
-              case 82: // lightSelector aka multiple light mode 0/all, 1/downlight, 2/uplight
+              case 82:  // lightSelector aka multiple light mode 0/all, 1/downlight, 2/uplight
                 [b, v] = getValue(b);
-                // lightSelector(v, pA);
-                funStack.splice(0, 0, [setTargetBulb, String(v)]);
-                // debugLog(pA, 'newcode', 2, 'inserted setTargetBulb at start of funStack');
+                // funStack.splice(0, 0, [setTargetBulb, String(v)]);
+                // debugLog(pA, 'light', 2, 'inserted setTargetBulb at start of funStack');
+                funStack.push([setTargetBulb, String(v)]);
                 break;
               case 85:  // light occupied
                 [b, v] = getValue(b);
-                funStack.push([lightOccupancyDetectedState, String(v)]);
-                // debugLog(pA, 'newcode', 1, `light occupancy: ${v} detected per field: ${field}`);
+                if (pA.capabilities.hasOccupancySensor) {
+                  funStack.push([lightOccupancyDetectedState, String(v)]);
+                }
+                if (v !== debugLastLightOccupancyValue) {
+                  debugLog(pA, 'occupancy', 1, `light occupancy: ${v} detected per field: ${field}`);
+                }
+                debugLastLightOccupancyValue = v;
                 break;
               case 86:  // temperature
                 [b, v] = getValue(b);
-                // currentTemperature(v / 100, pA);
-                funStack.push([currentTemperature, String(v/100)]);
+                if (pA.capabilities.hasTempSensor) {
+                  funStack.push([currentTemperature, String(v/100)]);
+                }
                 break;
               case 87:  // humidity
                 [b, v] = getValue(b);
-                // currentRelativeHumidity(v / 100, pA);
-                funStack.push([currentRelativeHumidity, String(v/100)]);
+                if (pA.capabilities.hasHumiditySensor) {
+                  funStack.push([currentRelativeHumidity, String(v/100)]);
+                }
+                break;
+              case 109: // light on means auto
+                [b, v] = getValue(b);
+                if (v) {
+                  debugLog(pA, 'newcode', 1, `light on means auto: ${v} field: ${field}`);
+                }
                 break;
               case 172: // UV-C enabled
                 [b, v] = getValue(b);
-                funStack.push([UVCOnState, String(v)]);
+                if (pA.capabilities.hasUVCLight) {
+                  funStack.push([UVCOnState, String(v)]);
+                }
                 break;
 
               // ignore strings / messages
@@ -1901,7 +1924,6 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               case 62:  // comfort sense heat assist direction
               case 63:  // target revolutions per minute
               case 64:  // actual rpm
-              case 67:  // fan on means auto
               case 70:  // brightness as level (0,1-16)
               case 72:  // light occupancy enabled
               case 73:  // light auto motion timeout (time)
@@ -1911,7 +1933,6 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               case 79:  // coolest color temperature
               case 95:  // fan timer minutes
               case 96:  // fan timer UTC expiration
-              case 109: // light on means auto
               case 134: // LED indicators enabled
               case 135: // audible indicator enabled
               case 136: // legacy IR remote enabled
@@ -1990,57 +2011,67 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               }
 
               case 17: { // capabilities (including light pressence)
-                let hasDownlight = false;
-                let hasUplight = false;
                 [b, length] = getVarint(b);
                 const remainingLength = (b.length) - length;
                 while (b.length > remainingLength) {
                   [b, type, field] = getProtoElements(b);
                   debugLog(pA, 'protoparse', 1, '        field: ' + field);
                   switch (field) {
-                    case 1: // has temperature sensor (ms)
-                    case 2: // has humidity sensor (ms)
-                    case 3: // has occupancy sensor (ms)
-                    case 5: // has light sensor (ms)
+                    case 1: // has temperature sensor
+                      [b, v] = getValue(b);
+                      pA.capabilities.hasTempSensor = Boolean(v);
+                      break;
+                    case 2: // has humidity sensor
+                      [b, v] = getValue(b);
+                      pA.capabilities.hasHumiditySensor = Boolean(v);
+                      break;
+                    case 3: // has occupancy sensor
+                      [b, v] = getValue(b);
+                      pA.capabilities.hasOccupancySensor = Boolean(v);
+                      break;
+                    case 4: // downlight
+                      [b, v] = getValue(b);
+                      pA.capabilities.hasLight = Boolean(v);
+                      break;
+                    case 5: // has light sensor
+                      [b, v] = getValue(b);
+                      pA.capabilities.hasLightSensor = Boolean(v);
+                      break;
                     case 6: // has color temp control
+                      [b, v] = getValue(b);
+                      pA.capabilities.hasColorTempControl = Boolean(v);
+                      break;
                     case 7: // has fan
+                      [b, v] = getValue(b);
+                      pA.capabilities.hasFan = Boolean(v);
+                      break;
                     case 8: // has speaker
+                      [b, v] = getValue(b);
+                      pA.capabilities.hasSpeaker = Boolean(v);
+                      break;
                     case 9: // has piezo (?)
+                      [b, v] = getValue(b);
+                      pA.capabilities.hasPiezo = Boolean(v);
+                      break;
                     case 10: // has LED indicators
+                      [b, v] = getValue(b);
+                      pA.capabilities.hasLEDIndicators = Boolean(v);
+                      break;
+                    case 11: // has uplight
+                      [b, v] = getValue(b);
+                      pA.capabilities.hasUplight = Boolean(v);
+                      break;
+                    case 12: // has UV-C
+                      [b, v] = getValue(b);
+                      pA.capabilities.hasUVCLight = Boolean(v);
+                      break;
                     case 13: // has standby LED
+                      [b, v] = getValue(b);
+                      pA.capabilities.hasStandbyLed = Boolean(v);
+                      break;
                     case 14: // has eco mode
-                      [b, v] = getValue(b);  // ignore
-                      debugLog(pA, 'protoparse', 1, `          value: ${v}`);
-                      debugLog(pA, 'cluing', 6, `field 17, mystery field: ${field}, value: ${v}`);
-                      break;
-
-                    case 4: // downlight!
                       [b, v] = getValue(b);
-                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
-                      debugLog(pA, 'cluing', 1, `downlight equipped per field ${field}`);
-                      if (v === 1) {
-                        hasDownlight = true;
-                      } else {
-                        debugLog(pA, 'redflags', 1, 'unexpected downlight presence value: ' + v);
-                      }
-                      break;
-
-                    case 11: // uplight detected
-                      debugLog(pA, 'cluing', 1, 'uplight equipped');
-
-                      [b, v] = getValue(b);  // uplight equipped?
-                      debugLog(pA, 'protoparse', 1, `          value: ${v}`);
-                      if (v === 1) {
-                        hasUplight = true;
-                      } else {
-                        debugLog(pA, 'redflags', 1, 'unexpected uplight presence value: ' + v);
-                      }
-                      break;
-
-                    case 12: // UV-C? - issue #20/aveach/Living Room Fan (es6 [3.1.1])
-                      [b, v] = getValue(b);
-                      funStack.push([UVCPresent, String(v)]);
-                      // debugLog(pA, 'newcode', 2, `field: 17, subfield "${field}", value: ${v}`);
+                      pA.capabilities.hasEcoMode = Boolean(v);
                       break;
 
                     default:
@@ -2050,50 +2081,29 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                   }
                 }
                 if (pA.downlightEquipped !== undefined) {
-                  if (hasDownlight !== pA.downlightEquipped) {
+                  if (pA.capabilities.hasLight !== pA.downlightEquipped) {
                     const str = `downlight presence overrriden by user configuration ("downlightEquipped": ${pA.downlightEquipped})`;
-                    hasDownlight = pA.downlightEquipped === true ? true : false;
-                    debugLog(pA, 'newcode', 1, str);
+                    pA.capabilities.hasLight = pA.downlightEquipped === true ? true : false;
+                    debugLog(pA, 'light', 1, str);
                     infoLogOnce(pA, str);
                   }
                 }
                 if (pA.uplightEquipped !== undefined) {
-                  if (hasUplight !== pA.uplightEquipped) {
+                  if (pA.capabilities.hasUplight !== pA.uplightEquipped) {
                     const str = `uplight presence overrriden by user configuration ("uplightEquipped": ${pA.uplightEquipped})`;
-                    hasUplight = pA.uplightEquipped === true ? true : false;
-                    debugLog(pA, 'newcode', 1, str);
+                    pA.capabilities.hasUplight = pA.uplightEquipped === true ? true : false;
+                    debugLog(pA, 'light', 1, str);
                     infoLogOnce(pA, str);
                   }
                 }
-                funStack.push([bulbsPresent2, String([hasDownlight, hasUplight])]);
-                break;
-              }
 
-              case 156: { // debug info
-                [b, length] = getVarint(b);
-                const remainingLength = (b.length) - length;
-                while (b.length > remainingLength) {
-                  [b, type, field] = getProtoElements(b);
-                  debugLog(pA, 'protoparse', 1, `        field: ${field}`);
-                  switch (field) {
-                    case 1: // uptime (minutes)
-                    case 2: // reboot count total
-                    case 3: // reboot count since por(?)
-                    case 4: // last reboot reason (see schema)
-                    case 5: // last reboot details
-                    case 6: // software error - issue #17-19/afellows77/Haiku L Series [3.1.1])
-                    case 7: // software error details
-                      [b, v] = getValue(b);
-                      debugLog(pA, 'cluing', 6, `field 156/${field}, mystery value: ${v}`);
-                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
-                      break;
-
-                    default:
-                      debugLog(pA, 'cluing', 1, `fell into default, field 156, subfield: "${field}"`);
-                      b = doUnknownField(b, type, pA);
-                      break;
-                  }
+                if (!pA.capabilitiesEstablished) {
+                  pA.capabilitiesEstablished = true;
+                  debugLog(pA, 'newcode', 1, 'capabilities established');
+                  logCapabilities(pA);
+                  makeServices(pA);
                 }
+
                 break;
               }
 
@@ -2145,6 +2155,61 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
 
                     default:
                       debugLog(pA, 'cluing', 1, 'fell into default, field 152 message with subfield: "' + field + '"');
+                      b = doUnknownField(b, type, pA);
+                      break;
+                  }
+                }
+                break;
+              }
+
+              case 156: { // manufacturer debug info
+                [b, length] = getVarint(b);
+                const remainingLength = (b.length) - length;
+                while (b.length > remainingLength) {
+                  [b, type, field] = getProtoElements(b);
+                  debugLog(pA, 'protoparse', 1, `        field: ${field}`);
+                  if (field > 0 && field <= 7) {
+                    [b, v] = getValue(b);
+                    debugLog(pA, 'protoparse', 1, '          value: ' + v);
+                  } else {
+                    v = 0;
+                  }
+                  switch (field) {
+                    case 1: // uptime (minutes)
+                      pA.uptimeMinutes = v;
+                      if (!uptimeLogged) {
+                        debugLog(pA, 'manufacturerDebug', 1, `uptime: ${toDaysHoursMinutesString(v)}`);
+                        uptimeLogged = true;
+                      }
+                      break;
+                    case 2: // reboot count total
+                      if (v !== lastRebootCount) {
+                        debugLog(pA, 'manufacturerDebug', 1, `reboot count total: ${v}`);
+                        showRebootReason = true;
+                      }
+                      lastRebootCount = v;
+                      break;
+                    case 3: // reboot count since por(?)
+                      debugLog(pA, 'manufacturerDebug', 1, `reboot count since por: ${v}`);
+                      break;
+                    case 4: // last reboot reason (see schema)
+                      if (showRebootReason) {
+                        debugLog(pA, 'manufacturerDebug', 1, `reboot reason: ${rebootReasons[v]}`);
+                        showRebootReason = false;
+                      }
+                      break;
+                    case 5: // last reboot details
+                      debugLog(pA, 'manufacturerDebug', 1, `last reboot details: ${v}`);
+                      break;
+                    case 6: // software error - issue #17-19/afellows77/Haiku L Series [3.1.1])
+                      debugLog(pA, 'manufacturerDebug', 1, `software error: ${v}`);
+                      break;
+                    case 7: // software error details
+                      debugLog(pA, 'manufacturerDebug', 1, `software error details: ${v}`);
+                      break;
+
+                    default:
+                      debugLog(pA, 'cluing', 1, `fell into default, field 156, subfield: "${field}"`);
                       b = doUnknownField(b, type, pA);
                       break;
                   }
@@ -2474,6 +2539,79 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
   return funStack;
 }
 
+function logCapabilities(pA:BigAssFans_i6PlatformAccessory) {
+  const c = pA.capabilities;
+  if (c.hasTempSensor) {
+    debugLogOnce(pA, 'capabilities', 1, 'has temperature sensor');
+  } else {
+    debugLogOnce(pA, 'capabilities', 1, 'no temperature sensor');
+  }
+  if (c.hasHumiditySensor) {
+    debugLogOnce(pA, 'capabilities', 1, 'has humidity sensor');
+  } else {
+    debugLogOnce(pA, 'capabilities', 1, 'no humidity sensor');
+  }
+  if (c.hasOccupancySensor) {
+    debugLogOnce(pA, 'capabilities', 1, 'has occupancy sensor');
+  } else {
+    debugLogOnce(pA, 'capabilities', 1, 'no occupancy sensor');
+  }
+  if (c.hasLight) {
+    debugLogOnce(pA, 'capabilities', 1, 'has downlight');
+  } else {
+    debugLogOnce(pA, 'capabilities', 1, 'no downlight');
+  }
+  if (c.hasLightSensor) {
+    debugLogOnce(pA, 'capabilities', 1, 'has light sensor');
+  } else {
+    debugLogOnce(pA, 'capabilities', 1, 'no light sensor');
+  }
+  if (c.hasColorTempControl) {
+    debugLogOnce(pA, 'capabilities', 1, 'has color temperature control');
+  } else {
+    debugLogOnce(pA, 'capabilities', 1, 'no color temperature control');
+  }
+  if (c.hasFan) {
+    debugLogOnce(pA, 'capabilities', 1, 'has fan');
+  } else {
+    debugLogOnce(pA, 'capabilities', 1, 'no fan');
+  }
+  if (c.hasSpeaker) {
+    debugLogOnce(pA, 'capabilities', 1, 'has speaker');
+  } else {
+    debugLogOnce(pA, 'capabilities', 1, 'no speaker');
+  }
+  if (c.hasPiezo) {
+    debugLogOnce(pA, 'capabilities', 1, 'has piezo');
+  } else {
+    debugLogOnce(pA, 'capabilities', 1, 'no piezo');
+  }
+  if (c.hasLEDIndicators) {
+    debugLogOnce(pA, 'capabilities', 1, 'has LED indicators');
+  } else {
+    debugLogOnce(pA, 'capabilities', 1, 'no LED indicators');
+  }
+  if (c.hasUplight) {
+    debugLogOnce(pA, 'capabilities', 1, 'has uplight');
+  } else {
+    debugLogOnce(pA, 'capabilities', 1, 'no uplight');
+  }
+  if (c.hasUVCLight) {
+    debugLogOnce(pA, 'capabilities', 1, 'has UV-C');
+  } else {
+    debugLogOnce(pA, 'capabilities', 1, 'no UV-C');
+  }
+  if (c.hasStandbyLed) {
+    debugLogOnce(pA, 'capabilities', 1, 'has standby LED');
+  } else {
+    debugLogOnce(pA, 'capabilities', 1, 'no standby LED');
+  }
+  if (c.hasEcoMode) {
+    debugLogOnce(pA, 'capabilities', 1, 'has eco mode');
+  } else {
+    debugLogOnce(pA, 'capabilities', 1, 'no eco mode');
+  }
+}
 // const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function doUnknownField(b: Buffer, type: number, pA: BAF) {
@@ -2497,23 +2635,6 @@ function doUnknownField(b: Buffer, type: number, pA: BAF) {
   }
   return b;
 }
-// function doUnknownFieldQuietly(b: Buffer, type: number, pA: BAF) {
-//   if (type === 0) {
-//     [b] = getVarint(b);
-//   } else if (type === 1) {
-//     b = b.subarray(8);
-//   } else if (type === 2) {
-//     let length: number;
-//     [b, length] = getVarint(b);
-//     b = b.subarray(length);
-//   } else if (type === 3 || type === 4) {
-//     debugLog(pA, 'redflag', 1, ' deprecated group type');
-//   } else if (type === 5) {
-//     b = b.subarray(4);
-//   }
-//   return b;
-// }
-
 
 function getBytes(b: Buffer) : [Buffer, Buffer] {
   let length: number;
@@ -2532,4 +2653,12 @@ function getValue(b: Buffer) : [Buffer, number] {
   [b, varInt] = getVarint(b);
 
   return [b, varInt];
+}
+
+function toDaysHoursMinutesString(minutes: number) : string {
+  // hbLog.debug(`toDaysHoursMinutesString/minutes: ${minutes}`);
+  const days = Math.floor(minutes / (24 * 60));
+  const hours = Math.floor(minutes % (24 * 60) / 60);
+
+  return `${days} ${days === 1 ? 'day' : 'days'} ${hours.toString().padStart(2, '0')}:${(minutes % 60).toString().padStart(2, '0')}`;
 }
