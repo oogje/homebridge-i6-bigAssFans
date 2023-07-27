@@ -174,6 +174,7 @@ export class BigAssFans_i6PlatformAccessory {
     this.Name = accessory.context.device.name;
 
     // defaults and enumeration of debugging keys
+    this.debugLevels['capabilities']      = 0;
     this.debugLevels['characteristics']   = 0;
     this.debugLevels['cluing']            = 0; // 6;
     this.debugLevels['direction']         = 0; // 1
@@ -739,12 +740,19 @@ function makeServices(pA: BAF) {
         pA.accessory.removeService(service);
       }
     }
+  } else {
+    if (pA.showFanOccupancySensor) {
+      hbLog.info(`'"showFanOccupancySensor": true' in config.json but this fan does not have an Occupancy Sensor`);//eslint-disable-line
+    }
+    if (pA.showLightOccupancySensor) {
+      hbLog.info(`'"showLightOccupancySensor": true' in config.json but this fan does not have an Occupancy Sensor`);//eslint-disable-line
+    }
   }
 
   // downlight
   if (pA.capabilities.hasLight) {
     if (pA.noLights) {
-      hbLog.info(`${pA.Name} downlight disabled by configuration "noLights: true"`);
+      hbLog.info(`${pA.Name} downlight disabled by configuration '"noLights": true'`);
       const service = pA.accessory.getService('downlight');
       if (service) {
         pA.accessory.removeService(service);
@@ -776,7 +784,7 @@ function makeServices(pA: BAF) {
   // uplight
   if (pA.capabilities.hasUplight) {
     if (pA.noLights) {
-      hbLog.info(`${pA.Name} uplight disabled by configuration "noLights: true"`);
+      hbLog.info(`${pA.Name} uplight disabled by configuration '"noLights": true'`);
       const service = pA.accessory.getService('uplight');
       if (service) {
         pA.accessory.removeService(service);
@@ -805,7 +813,7 @@ function makeServices(pA: BAF) {
 
   if (pA.capabilities.hasUVCLight) {
     if (pA.noLights) {
-      hbLog.info(`${pA.Name} UVC light disabled by configuration "noLights: true"`);
+      hbLog.info(`${pA.Name} UVC light disabled by configuration '"noLights": true'`);
     } else {
       if (pA.UVCSwitchService === undefined) {
         pA.UVCSwitchService = pA.accessory.getService('UVCSwitch') ||
@@ -821,7 +829,7 @@ function makeServices(pA: BAF) {
 
   // Current Temperature
   if (pA.capabilities.hasTempSensor) {
-    if (pA.accessory.context.device.showTemperature === undefined || pA.accessory.context.device.showTemperature !== false) {
+    if (pA.showTemperature === undefined || pA.showTemperature !== false) {
       pA.temperatureSensorService = pA.accessory.getService(pA.platform.Service.TemperatureSensor) ||
         pA.accessory.addService(pA.platform.Service.TemperatureSensor);
       accessoryName = capitalizeName ?  ' Temperature' : ' temperature';
@@ -839,7 +847,7 @@ function makeServices(pA: BAF) {
 
   // Current Relative Humidity
   if (pA.capabilities.hasHumiditySensor) {
-    if (pA.accessory.context.device.showHumidity === undefined || pA.accessory.context.device.showHumidity !== false) {
+    if (pA.showHumidity === undefined || pA.showHumidity !== false) {
       pA.humiditySensorService = pA.accessory.getService(pA.platform.Service.HumiditySensor) ||
         pA.accessory.addService(pA.platform.Service.HumiditySensor);
       accessoryName = capitalizeName ?  ' Humidity' : ' humidity';
@@ -874,8 +882,8 @@ function makeServices(pA: BAF) {
     }
   }
 
-  if (pA.capabilities.hasEcoMode) {
-    if (pA.showEcoModeSwitch) {
+  if (pA.showEcoModeSwitch) {
+    if (pA.capabilities.hasEcoMode) {
       pA.ecoModeSwitchService = pA.accessory.getService('ecoModeSwitch') ||
         pA.accessory.addService(pA.platform.Service.Switch, 'ecoModeSwitch', 'switch-5');
       accessoryName = capitalizeName ?  ' Eco Mode' : ' eco mode';
@@ -886,10 +894,12 @@ function makeServices(pA: BAF) {
         .onSet(pA.setEcoModeSwitchOnState.bind(pA))
         .onGet(pA.getEcoModeSwitchOnState.bind(pA));
     } else {
-      const service = pA.accessory.getService('ecoModeSwitch');
-      if (service) {
-        pA.accessory.removeService(service);
-      }
+      hbLog.info(`'"showEcoModeSwitch": true' in config.json but this fan does not support Eco Mode`);//eslint-disable-line
+    }
+  } else {
+    const service = pA.accessory.getService('ecoModeSwitch');
+    if (service) {
+      pA.accessory.removeService(service);
     }
   }
 }
@@ -912,7 +922,7 @@ function networkSetup(pA: BAF) {
     // then clear sailing for 1+ hours so far.
     pA.probeTimeout = setInterval(( )=> {
       if (pA.client !== undefined) {
-        clientWrite(pA.client, Buffer.from([0xc0, 0x12, 0x04, 0x1a, 0x02, 0x08, 0x03, 0xc0]), pA);
+        clientWrite(pA.client, Buffer.from([0xc0, 0x12, 0x04, 0x1a, 0x02, 0x08, 0x03, 0xc0]), pA); // parroting the BAF app
       } else {
         debugLog(pA, 'network', 4, 'client undefined in setInterval callback');
       }
@@ -921,20 +931,21 @@ function networkSetup(pA: BAF) {
 
   const connectOptions = {port: 31415, host: pA.IP, family: 4};
   pA.client = net.connect(connectOptions, () => {
-    debugLog(pA, 'progress', 2, 'connected!');
+    debugLog(pA, ['network', 'progress'], [1, 2], 'connected!');
     pA.client.setKeepAlive(true);
-    clientWrite(pA.client, Buffer.from([0xc0, 0x12, 0x04, 0x1a, 0x02, 0x08, 0x06, 0xc0]), pA);
-    clientWrite(pA.client, Buffer.from([0xc0, 0x12, 0x02, 0x1a, 0x00, 0xc0]), pA);
-
+    clientWrite(pA.client, Buffer.from([0xc0, 0x12, 0x04, 0x1a, 0x02, 0x08, 0x06, 0xc0]), pA);  // get capabilities
+    clientWrite(pA.client, Buffer.from([0xc0, 0x12, 0x02, 0x1a, 0x00, 0xc0]), pA);  // BAF app seemed to send this so we will also
   });
 
   let errHandler;
   let retryCount = 0;
+  let retrySeconds = 0;
+  let milliseconds: number;
 
   pA.client.on('error', errHandler = (err) => {
-    debugLog(pA, 'reconnect', 1, err.message);
+    debugLog(pA, 'reconnect', 1, `"${err.message}"`);
 
-    const retrySeconds = backOff(err.code, retryCount);
+    retrySeconds = backOff(err.code, retryCount);
     switch (err.code) {
       case 'ECONNREFUSED':
         hbLog.error(`${pA.Name} (${pA.IP}) connection refused ${err.code}.  Check that the correct IP is in json.config.`);
@@ -944,7 +955,7 @@ function networkSetup(pA: BAF) {
         }
         return;
       case 'ENETUNREACH':
-        hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' is unreachable [ENETUNREACH].  Check the correct IP is in json.config.');
+        hbLog.error(pA.Name + ' (' + pA.IP + ')' + ` is unreachable [${err.code}].  Check the correct IP is in json.config.`);
         return;
 
       case 'ETIMEDOUT':
@@ -953,35 +964,42 @@ function networkSetup(pA: BAF) {
         break;
       case 'EHOSTDOWN': {
         const minutes = Math.round(retrySeconds / 60);
-        hbLog.error(pA.Name + ' (' + pA.IP + ')' + ' connection problem [EHOSTDOWN].' +
+        hbLog.error(pA.Name + ' (' + pA.IP + ')' + ` connection problem [${err.code}].` +
           `Attempting reconnect in ${minutes} ${minutes === 1 ? 'minute.' : 'minutes.'}`);
         break;
       }
       case 'ECONNRESET':
-        // noticed 7/17/2023 there is an ECONNRESET every two hours.
+        // noticed 7/17/2023 there is an ECONNRESET every two hours.  But not always.
         debugLog(pA, 'reconnect', 1,
-          `${pA.Name} (${pA.IP}) network connection reset ${err.code}.  Attempting reconnect in ${retrySeconds} seconds.`);
+          `${pA.Name} (${pA.IP}) network connection reset [${err.code}].  Attempting reconnect in ${retrySeconds} seconds.`);
         debugLog(pA, 'reconnect', 1, `uptime: ${toDaysHoursMinutesString(pA.uptimeMinutes)}`);
         break;
       case 'EPIPE':
-        hbLog.warn(`${pA.Name} (${pA.IP}) network connection broke ${err.code}.  Attempting reconnect in ${retrySeconds} seconds.`);
+        hbLog.warn(`${pA.Name} (${pA.IP}) network connection broke [${err.code}].  Attempting reconnect in ${retrySeconds} seconds.`);
+        break;
+      case 'ENOTFOUND':
+        hbLog.warn(`${pA.Name} (${pA.IP}) network connection broke [${err.code}].  Attempting reconnect in ${retrySeconds} seconds.`);
         break;
 
       default:
-        hbLog.warn(`${pA.Name} (${pA.IP}) : Unhandled network error: ${err.code}.  Attempting reconnect in ${retrySeconds} seconds.`);
+        hbLog.warn(`${pA.Name} (${pA.IP}) Unhandled network error: [${err.code}].  Attempting reconnect in ${retrySeconds} seconds.`);
         break;
     }
 
     retryCount++;
     pA.client = undefined;
+    milliseconds = new Date().getTime();
+    debugLog(pA, 'reconnect', 1, `will reconnect in ${retrySeconds} seconds.  it is now ${milliseconds} since epoch`);
     setTimeout(() => {
       // already did this one or more times, don't need to send initilization message
+      const milliseconds = new Date().getTime();
+      debugLog(pA, 'reconnect', 1, `it is now ${milliseconds} since epoch.  attempting reconnect...`);
       pA.client = net.connect(connectOptions, () => {
         retryCount = 0;
         if (err.code !== 'ECONNRESET') { // ECONNRESETs seem pretty normal and regular
           hbLog.info(pA.Name + ' reconnected!');
         }
-        debugLog(pA, 'reconnect', 1, `reconnected after [${err.code}]`);
+        debugLog(pA, ['network', 'reconnect'], [1, 1], `reconnected after [${err.code}]`);
       });
       pA.client.on('error', (err) => {
         errHandler(err);
@@ -989,7 +1007,7 @@ function networkSetup(pA: BAF) {
       pA.client.on('data', (data) => {
         onData(pA, data);
       });
-    }, retrySeconds);
+    }, retrySeconds * 1000);
   });
 
   pA.client.on('data', (data: Buffer) => {
@@ -1024,6 +1042,8 @@ function networkSetup(pA: BAF) {
               default:
                 break;
             }
+          } else if (s === 'ECONNRESET') {
+            pA.client.destroy(new Error('ECONNRESET'));
           } else {
             const a = s.split(', ');
 
@@ -1056,6 +1076,8 @@ function backOff(errorMsgString: string, retryCount: number) : number {
       }
     case 'EHOSTDOWN':
       return 60 * (1 + retryCount);
+
+    case 'ENOTFOUND':
     case 'ECONNRESET':
       if (retryCount <= 5) {
         return 2;
@@ -1394,6 +1416,7 @@ function fanRotationSpeed(s: string, pA:BAF) {
 
 function currentTemperature(s: string, pA:BAF) {
   if (!pA.capabilities.hasTempSensor) {
+    debugLog(pA, 'redflags', 1, 'warning: currentTemperature() called when pA.capabilities.hasTempSensor === false');
     return;
   }
 
@@ -1404,15 +1427,14 @@ function currentTemperature(s: string, pA:BAF) {
   }
 
   // this test is probably unnecessary
-  if (pA.accessory.context.device.showTemperature !== undefined && pA.accessory.context.device.showTemperature === false) {
+  if (pA.showTemperature !== undefined && pA.showTemperature === false) {
     debugLog(pA, 'redflag', 1, 'if showTemperature is false then we should have returned per no Service test above');
     return;
   }
 
   if (value < -270 || value > 100) {
-    // Haiku L doesn't seem to support the temperature sensor, it just reports 1000º.  ignore it
     if (value === 1000) {
-      infoLogOnce(pA, 'current temperature out of range: ' + value + ', assuming no temperature sensor for model "' + pA.Model + '"');
+      infoLogOnce(pA, 'current temperature === 1000');
     } else {
       hbLog.info(pA.Name + ' - current temperature out of range: ' + value + ', ignored');
     }
@@ -1438,9 +1460,8 @@ function currentRelativeHumidity(s: string, pA:BAF) {
   }
 
   if (value < 0 || value > 100) {
-    // Haikus don't seem to support the humidity sensor, they just report 1000%.  ignore it
     if (value === 1000) {
-      infoLogOnce(pA, 'current relative humidity out of range: ' + value + ', assuming no humidity sensor for model "' + pA.Model + '"');
+      infoLogOnce(pA, 'current relative humidity === 1000');
       return;
     } else {
       hbLog.info(pA.Name + ' - current relative humidity out of range: ' + value + ', ignored');
@@ -1667,7 +1688,6 @@ function clientWrite(client, b, pA:BAF) {
   try  {
     client.write(b);
   } catch {
-    // hbLog.warn('clientWrite(' + client + ', ' + b.toString('hex') + ') failed');
     hbLog.warn(pA.Name + ' - clientWrite(..., ' + b.toString('hex') + ') failed');
   }
 }
@@ -2542,74 +2562,74 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
 function logCapabilities(pA:BigAssFans_i6PlatformAccessory) {
   const c = pA.capabilities;
   if (c.hasTempSensor) {
-    debugLogOnce(pA, 'capabilities', 1, 'has temperature sensor');
+    debugLog(pA, 'capabilities', 1, 'has temperature sensor');
   } else {
-    debugLogOnce(pA, 'capabilities', 1, 'no temperature sensor');
+    debugLog(pA, 'capabilities', 1, 'no temperature sensor');
   }
   if (c.hasHumiditySensor) {
-    debugLogOnce(pA, 'capabilities', 1, 'has humidity sensor');
+    debugLog(pA, 'capabilities', 1, 'has humidity sensor');
   } else {
-    debugLogOnce(pA, 'capabilities', 1, 'no humidity sensor');
+    debugLog(pA, 'capabilities', 1, 'no humidity sensor');
   }
   if (c.hasOccupancySensor) {
-    debugLogOnce(pA, 'capabilities', 1, 'has occupancy sensor');
+    debugLog(pA, 'capabilities', 1, 'has occupancy sensor');
   } else {
-    debugLogOnce(pA, 'capabilities', 1, 'no occupancy sensor');
+    debugLog(pA, 'capabilities', 1, 'no occupancy sensor');
   }
   if (c.hasLight) {
-    debugLogOnce(pA, 'capabilities', 1, 'has downlight');
+    debugLog(pA, 'capabilities', 1, 'has downlight');
   } else {
-    debugLogOnce(pA, 'capabilities', 1, 'no downlight');
+    debugLog(pA, 'capabilities', 1, 'no downlight');
   }
   if (c.hasLightSensor) {
-    debugLogOnce(pA, 'capabilities', 1, 'has light sensor');
+    debugLog(pA, 'capabilities', 1, 'has light sensor');
   } else {
-    debugLogOnce(pA, 'capabilities', 1, 'no light sensor');
+    debugLog(pA, 'capabilities', 1, 'no light sensor');
   }
   if (c.hasColorTempControl) {
-    debugLogOnce(pA, 'capabilities', 1, 'has color temperature control');
+    debugLog(pA, 'capabilities', 1, 'has color temperature control');
   } else {
-    debugLogOnce(pA, 'capabilities', 1, 'no color temperature control');
+    debugLog(pA, 'capabilities', 1, 'no color temperature control');
   }
   if (c.hasFan) {
-    debugLogOnce(pA, 'capabilities', 1, 'has fan');
+    debugLog(pA, 'capabilities', 1, 'has fan');
   } else {
-    debugLogOnce(pA, 'capabilities', 1, 'no fan');
+    debugLog(pA, 'capabilities', 1, 'no fan');
   }
   if (c.hasSpeaker) {
-    debugLogOnce(pA, 'capabilities', 1, 'has speaker');
+    debugLog(pA, 'capabilities', 1, 'has speaker');
   } else {
-    debugLogOnce(pA, 'capabilities', 1, 'no speaker');
+    debugLog(pA, 'capabilities', 1, 'no speaker');
   }
   if (c.hasPiezo) {
-    debugLogOnce(pA, 'capabilities', 1, 'has piezo');
+    debugLog(pA, 'capabilities', 1, 'has piezo');
   } else {
-    debugLogOnce(pA, 'capabilities', 1, 'no piezo');
+    debugLog(pA, 'capabilities', 1, 'no piezo');
   }
   if (c.hasLEDIndicators) {
-    debugLogOnce(pA, 'capabilities', 1, 'has LED indicators');
+    debugLog(pA, 'capabilities', 1, 'has LED indicators');
   } else {
-    debugLogOnce(pA, 'capabilities', 1, 'no LED indicators');
+    debugLog(pA, 'capabilities', 1, 'no LED indicators');
   }
   if (c.hasUplight) {
-    debugLogOnce(pA, 'capabilities', 1, 'has uplight');
+    debugLog(pA, 'capabilities', 1, 'has uplight');
   } else {
-    debugLogOnce(pA, 'capabilities', 1, 'no uplight');
+    debugLog(pA, 'capabilities', 1, 'no uplight');
   }
   if (c.hasUVCLight) {
-    debugLogOnce(pA, 'capabilities', 1, 'has UV-C');
+    debugLog(pA, 'capabilities', 1, 'has UV-C');
   } else {
-    debugLogOnce(pA, 'capabilities', 1, 'no UV-C');
+    debugLog(pA, 'capabilities', 1, 'no UV-C');
   }
   if (c.hasStandbyLed) {
-    debugLogOnce(pA, 'capabilities', 1, 'has standby LED');
+    debugLog(pA, 'capabilities', 1, 'has standby LED');
   } else {
-    debugLogOnce(pA, 'capabilities', 1, 'no standby LED');
+    debugLog(pA, 'capabilities', 1, 'no standby LED');
   }
   if (c.hasEcoMode) {
-    debugLogOnce(pA, 'capabilities', 1, 'has eco mode');
+    debugLog(pA, 'capabilities', 1, 'has eco mode');
   } else {
-    debugLogOnce(pA, 'capabilities', 1, 'no eco mode');
+    debugLog(pA, 'capabilities', 1, 'no eco mode');
   }
 }
 // const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
