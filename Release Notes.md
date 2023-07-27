@@ -1,5 +1,12 @@
 ## Release Notes
 
+### v0.6.0-beta3
+- Add this.debugLevels['capabilities']
+- Log (info) if config.json conflicts with capabilities
+- Clean up socket error handling code and most importantly…
+- Call setTimeout with milliseconds instead of seconds
+- redflag if currentTemperature() is called at all if not capable
+
 ### v0.6.0-beta2
 - relies on fan's communicated capabilities to determine types and number of lights, sensors, etc.
 - calls node's connect() with IPV4 family option to address issue #29
