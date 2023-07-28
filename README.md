@@ -67,7 +67,7 @@ Add the `BigAssFans-i6` platform in `config.json` in your home directory inside 
 
 Add your fan(s) in the `fans` array.
 
-Example configuration simple:
+Example basic configuration:
 
 ```js
 {
