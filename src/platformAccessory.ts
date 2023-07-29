@@ -742,10 +742,10 @@ function makeServices(pA: BAF) {
     }
   } else {
     if (pA.showFanOccupancySensor) {
-      hbLog.info(`'"showFanOccupancySensor": true' in config.json but this fan does not have an Occupancy Sensor`);//eslint-disable-line
+      hbLog.info('\'"showFanOccupancySensor": true\' in config.json but this fan does not have an Occupancy Sensor');
     }
     if (pA.showLightOccupancySensor) {
-      hbLog.info(`'"showLightOccupancySensor": true' in config.json but this fan does not have an Occupancy Sensor`);//eslint-disable-line
+      hbLog.info('\'"showLightOccupancySensor": true\' in config.json but this fan does not have an Occupancy Sensor');
     }
   }
 
@@ -894,7 +894,7 @@ function makeServices(pA: BAF) {
         .onSet(pA.setEcoModeSwitchOnState.bind(pA))
         .onGet(pA.getEcoModeSwitchOnState.bind(pA));
     } else {
-      hbLog.info(`'"showEcoModeSwitch": true' in config.json but this fan does not support Eco Mode`);//eslint-disable-line
+      hbLog.info('\'"showEcoModeSwitch": true\' in config.json but this fan does not support Eco Mode');
     }
   } else {
     const service = pA.accessory.getService('ecoModeSwitch');
@@ -902,6 +902,8 @@ function makeServices(pA: BAF) {
       pA.accessory.removeService(service);
     }
   }
+
+  debugLog(pA, 'progress', 1, 'leaving makeServices');
 }
 
 /**
@@ -914,7 +916,7 @@ function networkSetup(pA: BAF) {
 
   if (pA.ProbeFrequency !== 0) {
     // attempt to prevent the occassional socket reset.
-    // sending the mysterious code that the vendor app seems to send once every 15s but instead sending every minute didn't prevent it.
+    // sending the mysterious code that the vendor app seems to send once every 15s but instead sending every minute - didn't prevent it.
     // sending every 15 seconds didn't help.
     // calling socket.setKeepAlive([enable][, initialDelay]) when I establish it above didn't help.
     // obviously, I don't understand this stuff.
@@ -940,7 +942,6 @@ function networkSetup(pA: BAF) {
   let errHandler;
   let retryCount = 0;
   let retrySeconds = 0;
-  let milliseconds: number;
 
   pA.client.on('error', errHandler = (err) => {
     debugLog(pA, 'reconnect', 1, `"${err.message}"`);
@@ -988,12 +989,10 @@ function networkSetup(pA: BAF) {
 
     retryCount++;
     pA.client = undefined;
-    milliseconds = new Date().getTime();
-    debugLog(pA, 'reconnect', 1, `will reconnect in ${retrySeconds} seconds.  it is now ${milliseconds} since epoch`);
+    // debugLog(pA, 'reconnect', 1, `will reconnect in ${retrySeconds} seconds.`);
     setTimeout(() => {
       // already did this one or more times, don't need to send initilization message
-      const milliseconds = new Date().getTime();
-      debugLog(pA, 'reconnect', 1, `it is now ${milliseconds} since epoch.  attempting reconnect...`);
+      // debugLog(pA, 'reconnect', 1, 'attempting reconnect...');
       pA.client = net.connect(connectOptions, () => {
         retryCount = 0;
         if (err.code !== 'ECONNRESET') { // ECONNRESETs seem pretty normal and regular
@@ -2427,6 +2426,9 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                     debugLog(pA, 'protoparse', 1, '        field: ' + field);
                     switch (field) {
                       case 1: // id
+                        [b, v] = getValue(b); // ignore
+                        debugLog(pA, 'protoparse', 1, '        value: ' + v);
+                        break;
                       case 2: // name
                         [b, s] = getString(b);  // ignore
                         debugLog(pA, 'protoparse', 1, `          string: "${s}"`);
@@ -2449,7 +2451,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                         }
                         break;
                       }
-                      case 5: // undocumented
+                      case 5: // undocumented (varint per protobuf-decoder.netlify.app)
                       case 6: // is enabled
                         [b, v] = getValue(b); // ignore
                         debugLog(pA, 'protoparse', 1, '          value: ' + v);

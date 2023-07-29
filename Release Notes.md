@@ -1,5 +1,8 @@
 ## Release Notes
 
+### v0.6.0-beta4
+addresses a schedule parson problem - issue #29
+
 ### v0.6.0-beta3
 - Add this.debugLevels['capabilities']
 - Log (info) if config.json conflicts with capabilities
