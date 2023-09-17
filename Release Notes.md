@@ -1,7 +1,10 @@
 ## Release Notes
 
+### v0.6.0-beta5
+not fully baked attempt to make a "both lights" control - issue #30
+
 ### v0.6.0-beta4
-addresses a schedule parson problem - issue #29
+addresses a schedule parsing problem - issue #29
 
 ### v0.6.0-beta3
 - Add this.debugLevels['capabilities']
