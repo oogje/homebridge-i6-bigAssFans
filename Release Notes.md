@@ -1,5 +1,8 @@
 ## Release Notes
 
+### v0.6.0-beta6
+same as beta5 but different implementation.
+
 ### v0.6.0-beta5
 not fully baked attempt to make a "both lights" control - issue #30
 
