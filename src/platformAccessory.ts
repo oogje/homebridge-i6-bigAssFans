@@ -80,7 +80,7 @@ export class BigAssFans_i6PlatformAccessory {
   public fanOccupancySensorService!: Service;
   public lightOccupancySensorService!: Service;
 
-  public bothlightsBulbService!: Service;
+  // public bothlightsBulbService!: Service;
 
   public downlightStates: lightStates = {
     On: false,
@@ -96,12 +96,12 @@ export class BigAssFans_i6PlatformAccessory {
     homeShieldUp: false,  // used to prevent Home.app from turning light on at 100% when it's at zero percent.
   };
 
-  public bothlightStates: lightStates  = {
-    On: false,
-    Brightness: 1,  // percent
-    ColorTemperature: 2200,
-    homeShieldUp: false,  // used to prevent Home.app from turning light on at 100% when it's at zero percent.
-  };
+  // public bothlightStates: lightStates  = {
+  //   On: false,
+  //   Brightness: 1,  // percent
+  //   ColorTemperature: 2200,
+  //   homeShieldUp: false,  // used to prevent Home.app from turning light on at 100% when it's at zero percent.
+  // };
 
 
   public fanStates = {
@@ -134,7 +134,7 @@ export class BigAssFans_i6PlatformAccessory {
   public downlightEquipped = undefined;
   public uplightEquipped = undefined;
 
-  public bothlightsControl = false;
+  // public bothlightsControl = false;
 
   public enableDebugPort = false;
   public simulated = false; // for future use
@@ -280,9 +280,9 @@ export class BigAssFans_i6PlatformAccessory {
       this.showLightOccupancySensor = true;
     }
 
-    if (accessory.context.device.bothlightsControl) {
-      this.bothlightsControl = true;
-    }
+    // if (accessory.context.device.bothlightsControl) {
+    //   this.bothlightsControl = true;
+    // }
 
     if (accessory.context.device.enableDebugPort) {
       this.enableDebugPort = true;
@@ -643,74 +643,74 @@ export class BigAssFans_i6PlatformAccessory {
     return isOn;
   }
 
-  // I see two ways to implement the "both" lights control.
-  //  1) target both lights and send commands
-  //  2) call the individual lights' set() routines
-  //
-  // 2) apparently 2) didn't work, let's try 1)
-  async setBothlightsOnState(value: CharacteristicValue) {
-    debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Bothlights On -> ' + value);
+  // // I see two ways to implement the "both" lights control.
+  // //  1) target both lights and send commands
+  // //  2) call the individual lights' set() routines
+  // //
+  // // 2) apparently 2) didn't work, let's try 1)
+  // async setBothlightsOnState(value: CharacteristicValue) {
+  //   debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Bothlights On -> ' + value);
 
-    // this.setUpLightOnState(value);
-    // this.setDownLightOnState(value);
+  //   // this.setUpLightOnState(value);
+  //   // this.setDownLightOnState(value);
 
-    debugLog(this, ['light', 'newcode'], [1, 1], 'setBothlightsOnState: tell fan to target both lights');
-    clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_BOTH, 0xc0])), this);
+  //   debugLog(this, ['light', 'newcode'], [1, 1], 'setBothlightsOnState: tell fan to target both lights');
+  //   clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_BOTH, 0xc0])), this);
 
-    if (this.bothlightStates.On && (value as boolean)) {
-      debugLog(this, 'light', 1, 'setBothlightsOnState: redundant, ignore this');
-    } else {
-      this.bothlightStates.On = value as boolean;
-      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, (this.bothlightStates.On ? 0x01 : 0x00), 0xc0])), this);
-    }
-  }
+  //   if (this.bothlightStates.On && (value as boolean)) {
+  //     debugLog(this, 'light', 1, 'setBothlightsOnState: redundant, ignore this');
+  //   } else {
+  //     this.bothlightStates.On = value as boolean;
+  //     clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, (this.bothlightStates.On ? 0x01 : 0x00), 0xc0])), this);
+  //   }
+  // }
 
-  async getBothlightsOnState(): Promise<CharacteristicValue> {
-    const isOn = this.uplightStates.On || this.downlightStates.On;
-    debugLog(this, ['light', 'characteristics'], [2, 4], 'Get Characteristic Both Lights On -> ' + isOn);
-    // if you need to return an error to show the device as 'Not Responding' in the Home app:
-    // throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
-    return isOn;
-  }
+  // async getBothlightsOnState(): Promise<CharacteristicValue> {
+  //   const isOn = this.uplightStates.On || this.downlightStates.On;
+  //   debugLog(this, ['light', 'characteristics'], [2, 4], 'Get Characteristic Both Lights On -> ' + isOn);
+  //   // if you need to return an error to show the device as 'Not Responding' in the Home app:
+  //   // throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
+  //   return isOn;
+  // }
 
-  async setBothlightsBrightness(value: CharacteristicValue) {
+  // async setBothlightsBrightness(value: CharacteristicValue) {
 
-    // this.setUpBrightness(value);
-    // this.setDownBrightness(value);
+  //   // this.setUpBrightness(value);
+  //   // this.setDownBrightness(value);
 
-    let b: Buffer;
+  //   let b: Buffer;
 
-    debugLog(this, ['light', 'newcode'], [1, 1], 'setBothlightsBrightness: tell fan to target both lights');
-    clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_BOTH, 0xc0])), this);
+  //   debugLog(this, ['light', 'newcode'], [1, 1], 'setBothlightsBrightness: tell fan to target both lights');
+  //   clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_BOTH, 0xc0])), this);
 
-    if (value === 0) {
-      debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Bothlights Brightness -> ' + value);
-      this.bothlightStates.homeShieldUp = true;
-      this.bothlightStates.Brightness = 0;
-      const b1 = ONEBYTEHEADER.concat([0xa8, 0x04, 1, 0xc0]); // this one is for the device's memory
-      const b2 = ONEBYTEHEADER.concat([0xa8, 0x04, 0, 0xc0]); // this one is actually turn off light
-      b = Buffer.from(b1.concat(b2));
-    } else if (value === 100 && this.bothlightStates.homeShieldUp) {
-      this.bothlightStates.homeShieldUp = false;
-      this.bothlightStates.Brightness = 1;
-      b = Buffer.from(ONEBYTEHEADER.concat([0xa8, 0x04, 1, 0xc0]));
-    } else {
-      this.bothlightStates.homeShieldUp = false;
-      debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Both Brightness -> ' + value);
-      this.bothlightStates.Brightness = value as number;
-      b = Buffer.from(ONEBYTEHEADER.concat([0xa8, 0x04, this.bothlightStates.Brightness, 0xc0]));
-    }
-    clientWrite(this.client, b, this);
-  }
+  //   if (value === 0) {
+  //     debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Bothlights Brightness -> ' + value);
+  //     this.bothlightStates.homeShieldUp = true;
+  //     this.bothlightStates.Brightness = 0;
+  //     const b1 = ONEBYTEHEADER.concat([0xa8, 0x04, 1, 0xc0]); // this one is for the device's memory
+  //     const b2 = ONEBYTEHEADER.concat([0xa8, 0x04, 0, 0xc0]); // this one is actually turn off light
+  //     b = Buffer.from(b1.concat(b2));
+  //   } else if (value === 100 && this.bothlightStates.homeShieldUp) {
+  //     this.bothlightStates.homeShieldUp = false;
+  //     this.bothlightStates.Brightness = 1;
+  //     b = Buffer.from(ONEBYTEHEADER.concat([0xa8, 0x04, 1, 0xc0]));
+  //   } else {
+  //     this.bothlightStates.homeShieldUp = false;
+  //     debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Both Brightness -> ' + value);
+  //     this.bothlightStates.Brightness = value as number;
+  //     b = Buffer.from(ONEBYTEHEADER.concat([0xa8, 0x04, this.bothlightStates.Brightness, 0xc0]));
+  //   }
+  //   clientWrite(this.client, b, this);
+  // }
 
-  async getBothlightsBrightness(): Promise<CharacteristicValue> {
-    const b1 = (this.uplightStates.Brightness === 0 ? 1 : this.uplightStates.Brightness);
-    const b2 = (this.downlightStates.Brightness === 0 ? 1 : this.downlightStates.Brightness);
-    const avg = Math.ceil((b1 + b2)/2);
-    const brightness = avg > 1 ? avg : 1;
-    debugLog(this, ['light', 'characteristics'], [2, 4], 'Get Characteristic Both Brightness -> ' + brightness);
-    return brightness;
-  }
+  // async getBothlightsBrightness(): Promise<CharacteristicValue> {
+  //   const b1 = (this.uplightStates.Brightness === 0 ? 1 : this.uplightStates.Brightness);
+  //   const b2 = (this.downlightStates.Brightness === 0 ? 1 : this.downlightStates.Brightness);
+  //   const avg = Math.ceil((b1 + b2)/2);
+  //   const brightness = avg > 1 ? avg : 1;
+  //   debugLog(this, ['light', 'characteristics'], [2, 4], 'Get Characteristic Both Brightness -> ' + brightness);
+  //   return brightness;
+  // }
 
 }
 
@@ -892,40 +892,40 @@ function makeServices(pA: BAF) {
     zapService(pA, 'uplight');
   }
 
-  // provide switch to control both lights simultaneously?
-  if (pA.accessory.context.device.bothlightsControl === true) {
-    if (pA.capabilities.hasLight && pA.capabilities.hasUplight) {
-      if (pA.noLights) {
-        hbLog.info(`${pA.Name} '"bothlightsControl": true' but lights are disabled by configuration '"noLights": true'`);
-        zapService(pA, 'bothlights');
-      } else {
-        pA.bothlightsBulbService = pA.accessory.getService('bothlights') ||
-          pA.accessory.addService(pA.platform.Service.Lightbulb, 'bothlights', 'light-3');
-        const name = pA.Name + (capitalizeName ? ' Both Lights' : ' both lights');
-        debugLog(pA, ['light', 'newcode'], [1, 1], `set bothlightsBulbService name to ${name}`);
-        setName(pA, pA.bothlightsBulbService, name);
+  // // provide switch to control both lights simultaneously?
+  // if (pA.accessory.context.device.bothlightsControl === true) {
+  //   if (pA.capabilities.hasLight && pA.capabilities.hasUplight) {
+  //     if (pA.noLights) {
+  //       hbLog.info(`${pA.Name} '"bothlightsControl": true' but lights are disabled by configuration '"noLights": true'`);
+  //       zapService(pA, 'bothlights');
+  //     } else {
+  //       pA.bothlightsBulbService = pA.accessory.getService('bothlights') ||
+  //         pA.accessory.addService(pA.platform.Service.Lightbulb, 'bothlights', 'light-3');
+  //       const name = pA.Name + (capitalizeName ? ' Both Lights' : ' both lights');
+  //       debugLog(pA, ['light', 'newcode'], [1, 1], `set bothlightsBulbService name to ${name}`);
+  //       setName(pA, pA.bothlightsBulbService, name);
 
-        pA.bothlightsBulbService.getCharacteristic(pA.platform.Characteristic.On)
-          .onSet(pA.setBothlightsOnState.bind(pA))
-          .onGet(pA.getBothlightsOnState.bind(pA));
+  //       pA.bothlightsBulbService.getCharacteristic(pA.platform.Characteristic.On)
+  //         .onSet(pA.setBothlightsOnState.bind(pA))
+  //         .onGet(pA.getBothlightsOnState.bind(pA));
 
-        pA.bothlightsBulbService.getCharacteristic(pA.platform.Characteristic.Brightness)
-          .onSet(pA.setBothlightsBrightness.bind(pA))
-          .onGet(pA.getBothlightsBrightness.bind(pA));
+  //       pA.bothlightsBulbService.getCharacteristic(pA.platform.Characteristic.Brightness)
+  //         .onSet(pA.setBothlightsBrightness.bind(pA))
+  //         .onGet(pA.getBothlightsBrightness.bind(pA));
 
-      }
-    } else {
-      if (pA.capabilities.hasLight !== true) {
-        hbLog.info(`${pA.Name} '"bothlightsControl": true' but no downlight present`);
-      }
-      if (pA.capabilities.hasUplight !== true) {
-        hbLog.info(`${pA.Name} '"bothlightsControl": true' but no uplight present`);
-      }
-      zapService(pA, 'bothlights');
-    }
-  } else {
-    zapService(pA, 'bothlights');
-  }
+  //     }
+  //   } else {
+  //     if (pA.capabilities.hasLight !== true) {
+  //       hbLog.info(`${pA.Name} '"bothlightsControl": true' but no downlight present`);
+  //     }
+  //     if (pA.capabilities.hasUplight !== true) {
+  //       hbLog.info(`${pA.Name} '"bothlightsControl": true' but no uplight present`);
+  //     }
+  //     zapService(pA, 'bothlights');
+  //   }
+  // } else {
+  //   zapService(pA, 'bothlights');
+  // }
 
   if (pA.capabilities.hasUVCLight) {
     if (pA.noLights) {
@@ -1982,8 +1982,8 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 break;
               case 82:  // lightSelector aka multiple light mode 0/all, 1/downlight, 2/uplight
                 [b, v] = getValue(b);
-                funStack.splice(0, 0, [setTargetBulb, String(v)]);
-                debugLog(pA, 'light', 2, 'inserted setTargetBulb at start of funStack');
+                // funStack.splice(0, 0, [setTargetBulb, String(v)]);
+                // debugLog(pA, 'light', 2, 'inserted setTargetBulb at start of funStack');
                 funStack.push([setTargetBulb, String(v)]);
                 break;
               case 85:  // light occupied

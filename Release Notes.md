@@ -1,5 +1,8 @@
 ## Release Notes
 
+### v0.6.0-beta7
+remove "both lights" control code in prep for v0.6.0 release
+
 ### v0.6.0-beta6
 same as beta5 but different implementation.
 
