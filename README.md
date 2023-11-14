@@ -150,7 +150,7 @@ Adds accessory switch for the fan's Eco mode (true/false, defaults to false).
 Sets the frequency that probe messages are sent to the fan.  A frequency 0 milliseconds turns probing off (defaults to 60000 milliseconds).
 
 #### Other Configuration Fields
-* `noLight` [optional] Eliminates light switches (defaults to false)
+* `noLights` [optional] Eliminates light switches (defaults to false)
 * `showHumidity` [optional] Exposes humidity sensor (defaults to true)
 * `showTemperature` [optional] Exposes temperature sensor (defaults to true).
 * `downlightEquipped` [optional] Overrides downlight detection (defaults to undefined)
