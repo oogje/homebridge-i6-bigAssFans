@@ -165,7 +165,7 @@ In some cases the Home app doesn't have the option to **Show as Separate Tiles**
 
 First, make sure you can control your fan from the official Big Ass Fans app.
 
-If you have any issues with the plugin, you can run Homebridge in debug mode, which will provide some additional information. This may be useful for investigating issues.
+If you have any issues with the plugin, you can run Homebridge in debug mode, which will provide some additional information. This may be useful for investigating problems.
 
 Homebridge debug mode:
 

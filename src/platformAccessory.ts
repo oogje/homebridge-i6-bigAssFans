@@ -642,76 +642,6 @@ export class BigAssFans_i6PlatformAccessory {
     debugLog(this, 'characteristics', 3, 'Get Characteristic UVC Switch On -> ' + isOn);
     return isOn;
   }
-
-  // // I see two ways to implement the "both" lights control.
-  // //  1) target both lights and send commands
-  // //  2) call the individual lights' set() routines
-  // //
-  // // 2) apparently 2) didn't work, let's try 1)
-  // async setBothlightsOnState(value: CharacteristicValue) {
-  //   debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Bothlights On -> ' + value);
-
-  //   // this.setUpLightOnState(value);
-  //   // this.setDownLightOnState(value);
-
-  //   debugLog(this, ['light', 'newcode'], [1, 1], 'setBothlightsOnState: tell fan to target both lights');
-  //   clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_BOTH, 0xc0])), this);
-
-  //   if (this.bothlightStates.On && (value as boolean)) {
-  //     debugLog(this, 'light', 1, 'setBothlightsOnState: redundant, ignore this');
-  //   } else {
-  //     this.bothlightStates.On = value as boolean;
-  //     clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, (this.bothlightStates.On ? 0x01 : 0x00), 0xc0])), this);
-  //   }
-  // }
-
-  // async getBothlightsOnState(): Promise<CharacteristicValue> {
-  //   const isOn = this.uplightStates.On || this.downlightStates.On;
-  //   debugLog(this, ['light', 'characteristics'], [2, 4], 'Get Characteristic Both Lights On -> ' + isOn);
-  //   // if you need to return an error to show the device as 'Not Responding' in the Home app:
-  //   // throw new this.platform.api.hap.HapStatusError(this.platform.api.hap.HAPStatus.SERVICE_COMMUNICATION_FAILURE);
-  //   return isOn;
-  // }
-
-  // async setBothlightsBrightness(value: CharacteristicValue) {
-
-  //   // this.setUpBrightness(value);
-  //   // this.setDownBrightness(value);
-
-  //   let b: Buffer;
-
-  //   debugLog(this, ['light', 'newcode'], [1, 1], 'setBothlightsBrightness: tell fan to target both lights');
-  //   clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_BOTH, 0xc0])), this);
-
-  //   if (value === 0) {
-  //     debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Bothlights Brightness -> ' + value);
-  //     this.bothlightStates.homeShieldUp = true;
-  //     this.bothlightStates.Brightness = 0;
-  //     const b1 = ONEBYTEHEADER.concat([0xa8, 0x04, 1, 0xc0]); // this one is for the device's memory
-  //     const b2 = ONEBYTEHEADER.concat([0xa8, 0x04, 0, 0xc0]); // this one is actually turn off light
-  //     b = Buffer.from(b1.concat(b2));
-  //   } else if (value === 100 && this.bothlightStates.homeShieldUp) {
-  //     this.bothlightStates.homeShieldUp = false;
-  //     this.bothlightStates.Brightness = 1;
-  //     b = Buffer.from(ONEBYTEHEADER.concat([0xa8, 0x04, 1, 0xc0]));
-  //   } else {
-  //     this.bothlightStates.homeShieldUp = false;
-  //     debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Both Brightness -> ' + value);
-  //     this.bothlightStates.Brightness = value as number;
-  //     b = Buffer.from(ONEBYTEHEADER.concat([0xa8, 0x04, this.bothlightStates.Brightness, 0xc0]));
-  //   }
-  //   clientWrite(this.client, b, this);
-  // }
-
-  // async getBothlightsBrightness(): Promise<CharacteristicValue> {
-  //   const b1 = (this.uplightStates.Brightness === 0 ? 1 : this.uplightStates.Brightness);
-  //   const b2 = (this.downlightStates.Brightness === 0 ? 1 : this.downlightStates.Brightness);
-  //   const avg = Math.ceil((b1 + b2)/2);
-  //   const brightness = avg > 1 ? avg : 1;
-  //   debugLog(this, ['light', 'characteristics'], [2, 4], 'Get Characteristic Both Brightness -> ' + brightness);
-  //   return brightness;
-  // }
-
 }
 
 function makeServices(pA: BAF) {
@@ -892,41 +822,6 @@ function makeServices(pA: BAF) {
     zapService(pA, 'uplight');
   }
 
-  // // provide switch to control both lights simultaneously?
-  // if (pA.accessory.context.device.bothlightsControl === true) {
-  //   if (pA.capabilities.hasLight && pA.capabilities.hasUplight) {
-  //     if (pA.noLights) {
-  //       hbLog.info(`${pA.Name} '"bothlightsControl": true' but lights are disabled by configuration '"noLights": true'`);
-  //       zapService(pA, 'bothlights');
-  //     } else {
-  //       pA.bothlightsBulbService = pA.accessory.getService('bothlights') ||
-  //         pA.accessory.addService(pA.platform.Service.Lightbulb, 'bothlights', 'light-3');
-  //       const name = pA.Name + (capitalizeName ? ' Both Lights' : ' both lights');
-  //       debugLog(pA, ['light', 'newcode'], [1, 1], `set bothlightsBulbService name to ${name}`);
-  //       setName(pA, pA.bothlightsBulbService, name);
-
-  //       pA.bothlightsBulbService.getCharacteristic(pA.platform.Characteristic.On)
-  //         .onSet(pA.setBothlightsOnState.bind(pA))
-  //         .onGet(pA.getBothlightsOnState.bind(pA));
-
-  //       pA.bothlightsBulbService.getCharacteristic(pA.platform.Characteristic.Brightness)
-  //         .onSet(pA.setBothlightsBrightness.bind(pA))
-  //         .onGet(pA.getBothlightsBrightness.bind(pA));
-
-  //     }
-  //   } else {
-  //     if (pA.capabilities.hasLight !== true) {
-  //       hbLog.info(`${pA.Name} '"bothlightsControl": true' but no downlight present`);
-  //     }
-  //     if (pA.capabilities.hasUplight !== true) {
-  //       hbLog.info(`${pA.Name} '"bothlightsControl": true' but no uplight present`);
-  //     }
-  //     zapService(pA, 'bothlights');
-  //   }
-  // } else {
-  //   zapService(pA, 'bothlights');
-  // }
-
   if (pA.capabilities.hasUVCLight) {
     if (pA.noLights) {
       hbLog.info(`${pA.Name} UVC light disabled by configuration '"noLights": true'`);
@@ -1010,7 +905,7 @@ function makeServices(pA: BAF) {
         .onSet(pA.setEcoModeSwitchOnState.bind(pA))
         .onGet(pA.getEcoModeSwitchOnState.bind(pA));
     } else {
-      hbLog.info('\'"showEcoModeSwitch": true\' in config.json but this fan does not support Eco Mode');
+      hbLog.info(`'"showEcoModeSwitch": true' in config.json but this fan (${pA.Name}) does not support Eco Mode`);
     }
   } else {
     const service = pA.accessory.getService('ecoModeSwitch');
@@ -1210,33 +1105,66 @@ function backOff(errorMsgString: string, retryCount: number) : number {
 /**
 *  separate the data into chunks as required and feed them, unstuffed, to preChunk (if needed) and doChunk() one at a time.
 */
-function onData(pA: BAF, data: Buffer) {
-  debugLog(pA, 'network', 13, 'raw (stuffed) data: ' + hexFormat(data));
-  debugLog(pA, 'network', 8, 'accessory client got: ' + data.length + (data.length === 1 ? ' byte' : ' bytes'));
 
-  // break data into individual chunks bracketed by 0xc0
-  let startIndex = -1;
-  let endIndex = -1;
+let chunkFragment: Buffer = Buffer.alloc(0);
+
+function onData(pA: BAF, data: Buffer) {
+  debugLog(pA, 'network', 8, `accessory client got: ${data.length} ${(data.length === 1 ? ' byte' : ' bytes')}`);
+  debugLog(pA, 'network', 13, `raw (stuffed) data:  ${hexFormat(data)}`);
+
+  let startIndex = 0;
   let numChunks = 0;
   const chunks: Buffer[] = [];
-  for (let i = 0; i < data.length; i++) {
+
+  if (data[0] !== 0xc0 || (data[0] === 0xc0 && data[1] === 0xc0)) {
+    // must be remaining fragment from last message
+    startIndex = data.indexOf(0xc0) + 1;  // should be a starting 0xc0 here
+    if (chunkFragment.length <= 0) {
+      debugLog(pA, ['newcode', 'redflags'], [1, 1], `dangling data fragment or empty message - ${startIndex} bytes ignored`);
+    } else {
+      const arr = [chunkFragment, data.subarray(0, startIndex)]; // startIndex serves as length here
+      chunks[numChunks] = Buffer.concat(arr);
+      debugLog(pA, 'network', 14, `chunkFragment ${hexFormat(chunkFragment)}`);
+      debugLog(pA, 'network', 14, `data.subarray(0, ${startIndex}) ${hexFormat(data.subarray(0, startIndex))}`);
+      debugLog(pA, 'network', 9, `built chunk from fragments ${hexFormat(chunks[numChunks])}`);
+      debugLog(pA, 'newcode', 1, 'built chunk from fragments');
+      numChunks++;
+    }
+  }
+
+  debugLog(pA, 'network', 9, `startIndex: ${startIndex}`);
+  let finalEndMarker = 0;
+  let foundStart = false;
+
+  for (let i = startIndex; i < data.length; i++) {
     if (data[i] === 0xc0) {
-      if (startIndex < 0) {
+      if (!foundStart) {
+        debugLog(pA, ['network', 'newcode'], [9, 2], `start marker at ${i}`);
+        foundStart = true;
         startIndex = i;
-        endIndex = -1;
       } else {
-        endIndex = i;
-        chunks[numChunks] = data.subarray(startIndex, endIndex+1);
+        debugLog(pA, ['network', 'newcode'], [9, 2], `end marker at ${i}`);
+        chunks[numChunks] = data.subarray(startIndex, i+1);
         numChunks++;
-        startIndex = -1;
+        foundStart = false;
+        finalEndMarker = i;
       }
     }
   }
 
+  if (finalEndMarker < (data.length - 1)) {
+    debugLog(pA, ['network', 'newcode'], [9, 1], 'stashed data fragment');
+    debugLog(pA, 'network', 10, `finalEndMarker: ${finalEndMarker}`);
+    chunkFragment = data.subarray(finalEndMarker + 1);
+    debugLog(pA, 'network', 10, `chunkFragment ${hexFormat(chunkFragment)}`);
+  } else {
+    chunkFragment = Buffer.from([]);
+  }
+
   for (let i = 0; i < numChunks; i++) {
     if (chunks[i][0] !== 0xc0 || chunks[i][chunks[i].length-1] !== 0xc0) {
-      debugLog(pA, 'redflags', 1, 'unbracketed chunk');
-      return;
+      debugLog(pA, 'redflags', 1, `unbracketed chunk: ${i} - ${hexFormat(chunks[i])}`);
+      continue;
     } else {
       chunks[i] = chunks[i].subarray(1, chunks[i].length-1);
     }
@@ -1280,7 +1208,9 @@ function setName(pA: BAF, service: Service, name: string) {
   service.setCharacteristic(pA.platform.Characteristic.Name, name);
 
   if (!service.testCharacteristic(pA.platform.Characteristic.ConfiguredName)) {
+    debugLog(pA, 'newcode', 1, '  service.addCharacteristic(platform.Characteristic.ConfiguredName)');
     service.addCharacteristic(pA.platform.Characteristic.ConfiguredName);
+    debugLog(pA, 'newcode', 1, `  service.setCharacteristic(platform.Characteristic.ConfiguredName, ${name})`);
     service.setCharacteristic(pA.platform.Characteristic.ConfiguredName, name);
   }
 }
@@ -1395,17 +1325,17 @@ function targetedlightBrightness(value:number, lightBulbService:Service, states:
   if (value !== 0) {
     states.homeShieldUp = false;
     states.Brightness = (value as number);
-    debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} Brightness: ` + states.Brightness);
+    debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} Brightness: ${states.Brightness}`);
     lightBulbService.updateCharacteristic(pA.platform.Characteristic.Brightness, states.Brightness);
     if (states.On === false) {
       states.On = true;
-      debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} Light On From targetedlightBrightness: ` + states.On);
+      debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} Light On From targetedlightBrightness: ${states.On}`);
       lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, states.On);
     }
   } else {
     if (states.On === true) {
       states.On = false;
-      debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} Light On From lightBrightness: ` + states.On);
+      debugLog(pA, ['light', 'characteristics'], [1, 3], `update ${description} Light On From lightBrightness: ${states.On}`);
       lightBulbService.updateCharacteristic(pA.platform.Characteristic.On, states.On);
     }
   }
@@ -1958,13 +1888,14 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 break;
               case 68:  // light on/off/auto
                 [b, v] = getValue(b);
-                if (pA.capabilities.hasLight) {
+                if (pA.capabilities.hasLight || pA.capabilities.hasUplight) {
                   funStack.push([lightOnState, String(v)]);
                 }
                 break;
               case 69:  // light brightness
                 [b, v] = getValue(b);
-                if (pA.capabilities.hasLight) {
+                if (pA.capabilities.hasLight || pA.capabilities.hasUplight) {
+                  debugLog(pA, 'light', 1, `buildFunStack - light brightness: ${v}`);
                   funStack.push([lightBrightness, String(v)]);
                 }
                 break;
@@ -1976,15 +1907,16 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 break;
               case 77:  // light dim to warm
                 [b, v] = getValue(b);
-                if (pA.capabilities.hasLight) {
+                if (pA.capabilities.hasLight || pA.capabilities.hasUplight) {
                   funStack.push([dimToWarmOnState, String(v)]);
                 }
                 break;
               case 82:  // lightSelector aka multiple light mode 0/all, 1/downlight, 2/uplight
                 [b, v] = getValue(b);
-                // funStack.splice(0, 0, [setTargetBulb, String(v)]);
-                // debugLog(pA, 'light', 2, 'inserted setTargetBulb at start of funStack');
-                funStack.push([setTargetBulb, String(v)]);
+                debugLog(pA, 'light', 1, `buildFunStack - target bulb: ${v}`);
+                funStack.splice(0, 0, [setTargetBulb, String(v)]);
+                debugLog(pA, 'light', 2, 'inserted setTargetBulb at start of funStack');
+                // funStack.push([setTargetBulb, String(v)]);
                 break;
               case 85:  // light occupied
                 [b, v] = getValue(b);
@@ -2213,7 +2145,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 }
                 if (pA.downlightEquipped !== undefined) {
                   if (pA.capabilities.hasLight !== pA.downlightEquipped) {
-                    const str = `downlight presence overrriden by user configuration ("downlightEquipped": ${pA.downlightEquipped})`;
+                    const str = `downlight presence overriden by user configuration ("downlightEquipped": ${pA.downlightEquipped})`;
                     pA.capabilities.hasLight = pA.downlightEquipped === true ? true : false;
                     debugLog(pA, 'light', 1, str);
                     infoLogOnce(pA, str);
@@ -2221,7 +2153,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 }
                 if (pA.uplightEquipped !== undefined) {
                   if (pA.capabilities.hasUplight !== pA.uplightEquipped) {
-                    const str = `uplight presence overrriden by user configuration ("uplightEquipped": ${pA.uplightEquipped})`;
+                    const str = `uplight presence overriden by user configuration ("uplightEquipped": ${pA.uplightEquipped})`;
                     pA.capabilities.hasUplight = pA.uplightEquipped === true ? true : false;
                     debugLog(pA, 'light', 1, str);
                     infoLogOnce(pA, str);

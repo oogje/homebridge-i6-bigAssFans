@@ -1,5 +1,9 @@
 ## Release Notes
 
+### v0.6.0-beta8
+- changes to handle fragmented messages - issue #30
+- insert lightSelector at beginning of funStack
+
 ### v0.6.0-beta7
 remove "both lights" control code in prep for v0.6.0 release
 
