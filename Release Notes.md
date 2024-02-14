@@ -1,5 +1,9 @@
 ## Release Notes
 
+### v0.6.0-beta9
+- 1st crack a handling night light/standbyLED
+- stuffing messages sent to fan
+
 ### v0.6.0-beta8
 - changes to handle fragmented messages - issue #30
 - insert lightSelector at beginning of funStack

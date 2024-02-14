@@ -10,7 +10,7 @@ let hbLog: Logger;
 
 const MAXFANSPEED = 7;
 
-const ONEBYTEHEADER = [0xc0, 0x12, 0x07, 0x12, 0x05, 0x1a, 0x03];
+const ONEBYTEHEADER = [0x12, 0x07, 0x12, 0x05, 0x1a, 0x03];
 
 // const MODEL_I6 =       'i6';
 // const MODEL_ES6 =      'es6';
@@ -28,6 +28,14 @@ interface lightStates {
   homeShieldUp: boolean;  // used to prevent Home.app from turning light on at 100% when it's at zero percent.
 }
 
+interface colorLightStates {
+  On: boolean;
+  Brightness: number; // percent
+  ColorTemperature: number;
+  Hue: number;
+  Saturation: number;
+}
+
 type BAF = BigAssFans_i6PlatformAccessory;
 
 interface Capabilities {
@@ -43,7 +51,7 @@ interface Capabilities {
   hasLEDIndicators: boolean;
   hasUplight: boolean;
   hasUVCLight: boolean;
-  hasStandbyLed: boolean;
+  hasStandbyLED: boolean;
   hasEcoMode : boolean;
 }
 
@@ -62,7 +70,7 @@ export class BigAssFans_i6PlatformAccessory {
     hasLEDIndicators: false,
     hasUplight: false,
     hasUVCLight: false,
-    hasStandbyLed: false,
+    hasStandbyLED: false,
     hasEcoMode: false,
   };
 
@@ -79,6 +87,8 @@ export class BigAssFans_i6PlatformAccessory {
   public UVCSwitchService!: Service;
   public fanOccupancySensorService!: Service;
   public lightOccupancySensorService!: Service;
+  public standbyLEDEnabledSwitchService!: Service;
+  public standbyLEDBulbService!: Service;
 
   // public bothlightsBulbService!: Service;
 
@@ -94,6 +104,15 @@ export class BigAssFans_i6PlatformAccessory {
     Brightness: 1,  // percent
     ColorTemperature: 2200,
     homeShieldUp: false,  // used to prevent Home.app from turning light on at 100% when it's at zero percent.
+  };
+
+  public standbyLEDStates: colorLightStates  = {
+    On: false,
+    Brightness: 0,          // percent
+    ColorTemperature: 2200, // Mireds!
+    Hue: 60,                // angle
+    Saturation: 100,        // percent
+    // homeShieldUp: false,  // used to prevent Home.app from turning light on at 100% when it's at zero percent.
   };
 
   // public bothlightStates: lightStates  = {
@@ -130,6 +149,8 @@ export class BigAssFans_i6PlatformAccessory {
   public noLights = false;
   public showFanOccupancySensor = false;
   public showLightOccupancySensor = false;
+  public showStandbyLED = false;
+  public standbyLEDEnabledSwitchOn = false;
 
   public downlightEquipped = undefined;
   public uplightEquipped = undefined;
@@ -284,6 +305,10 @@ export class BigAssFans_i6PlatformAccessory {
     //   this.bothlightsControl = true;
     // }
 
+    if (accessory.context.device.showStandbyLED) {
+      this.showStandbyLED = true;
+    }
+
     if (accessory.context.device.enableDebugPort) {
       this.enableDebugPort = true;
     }
@@ -309,14 +334,14 @@ export class BigAssFans_i6PlatformAccessory {
     debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Downlight On -> ' + value);
 
     if (this.bulbCount === 2) {
-      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_DOWN, 0xc0])), this);
+      clientWrite(this.client, ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_DOWN]), this);
     }
 
     if (this.downlightStates.On && (value as boolean)) {
       debugLog(this, 'light', 1, 'setDownLightOnState: redundant, ignore this');
     } else {
       this.downlightStates.On = value as boolean;
-      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, (this.downlightStates.On ? 0x01 : 0x00), 0xc0])), this);
+      clientWrite(this.client, ONEBYTEHEADER.concat([0xa0, 0x04, (this.downlightStates.On ? 0x01 : 0x00)]), this);
     }
   }
 
@@ -329,28 +354,28 @@ export class BigAssFans_i6PlatformAccessory {
   }
 
   async setDownBrightness(value: CharacteristicValue) {
-    let b: Buffer;
+    let b: number[];
 
     if (this.bulbCount === 2) {
-      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_DOWN, 0xc0])), this);
+      clientWrite(this.client, ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_DOWN]), this);
     }
 
     if (value === 0) {
       debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Down Brightness -> ' + value);
       this.downlightStates.homeShieldUp = true;
       this.downlightStates.Brightness = 0;
-      const b1 = ONEBYTEHEADER.concat([0xa8, 0x04, 1, 0xc0]); // this one is for the device's memory
-      const b2 = ONEBYTEHEADER.concat([0xa8, 0x04, 0, 0xc0]); // this one is actually turn off light
-      b = Buffer.from(b1.concat(b2));
+      const b1 = ONEBYTEHEADER.concat([0xa8, 0x04, 1]); // this one is for the device's memory
+      const b2 = ONEBYTEHEADER.concat([0xa8, 0x04, 0]); // this one is actually turn off light
+      b = b1.concat(b2);
     } else if (value === 100 && this.downlightStates.homeShieldUp) {
       this.downlightStates.homeShieldUp = false;
       this.downlightStates.Brightness = 1;
-      b = Buffer.from(ONEBYTEHEADER.concat([0xa8, 0x04, 1, 0xc0]));
+      b = ONEBYTEHEADER.concat([0xa8, 0x04, 1]);
     } else {
       this.downlightStates.homeShieldUp = false;
       debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Down Brightness -> ' + value);
       this.downlightStates.Brightness = value as number;
-      b = Buffer.from(ONEBYTEHEADER.concat([0xa8, 0x04, this.downlightStates.Brightness, 0xc0]));
+      b = ONEBYTEHEADER.concat([0xa8, 0x04, this.downlightStates.Brightness]);
     }
     clientWrite(this.client, b, this);
   }
@@ -365,19 +390,19 @@ export class BigAssFans_i6PlatformAccessory {
     debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Up Light On -> ' + value);
 
     if (this.bulbCount === 2) {
-      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_UP, 0xc0])), this);
+      clientWrite(this.client, ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_UP]), this);
     } else if (this.Model === 'es6')  { // es6 with one light - temporary(!?) hack to debug issue #20
       // don't know if this issue is limited to the es6 but the network/11 dumps from issue #20 show the MultipleLightMode property
       //  has a value of "1" which means "Downlight".  But the fan in question only has an uplight.  But apparently it thinks it's a
       //  downlight, so we'll go with that.
-      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, this.targetBulb, 0xc0])), this);
+      clientWrite(this.client, ONEBYTEHEADER.concat([0x90, 0x05, this.targetBulb]), this);
     }
 
     if (this.uplightStates.On && (value as boolean)) {
       debugLog(this, 'light', 1, 'setUpLightOnState: redundant, ignore this');
     } else {
       this.uplightStates.On = value as boolean;
-      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, (this.uplightStates.On ? 0x01 : 0x00), 0xc0])), this);
+      clientWrite(this.client, ONEBYTEHEADER.concat([0xa0, 0x04, (this.uplightStates.On ? 0x01 : 0x00)]), this);
     }
   }
 
@@ -388,31 +413,31 @@ export class BigAssFans_i6PlatformAccessory {
   }
 
   async setUpBrightness(value: CharacteristicValue) {
-    let b: Buffer;
+    let b: number[];
 
     if (this.bulbCount === 2) {
-      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_UP, 0xc0])), this);
+      clientWrite(this.client, ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_UP]), this);
     }
     if (this.Model === 'es6')  { // temporary(!?) hack to debug issue #20, see setUpLightOnState()
-      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, this.targetBulb, 0xc0])), this);
+      clientWrite(this.client, ONEBYTEHEADER.concat([0x90, 0x05, this.targetBulb]), this);
     }
 
     if (value === 0) {
       debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Up Brightness -> ' + value);
       this.uplightStates.homeShieldUp = true;
       this.uplightStates.Brightness = 0;
-      const b1 = ONEBYTEHEADER.concat([0xa8, 0x04, 1, 0xc0]); // this one is for the device's memory
-      const b2 = ONEBYTEHEADER.concat([0xa8, 0x04, 0, 0xc0]); // this one is actually turn off light
-      b = Buffer.from(b1.concat(b2));
+      const b1 = ONEBYTEHEADER.concat([0xa8, 0x04, 1]); // this one is for the device's memory
+      const b2 = ONEBYTEHEADER.concat([0xa8, 0x04, 0]); // this one is actually turn off light
+      b = b1.concat(b2);
     } else if (value === 100 && this.uplightStates.homeShieldUp) {
       this.uplightStates.homeShieldUp = false;
       this.uplightStates.Brightness = 1;
-      b = Buffer.from(ONEBYTEHEADER.concat([0xa8, 0x04, 1, 0xc0]));
+      b = ONEBYTEHEADER.concat([0xa8, 0x04, 1]);
     } else {
       this.uplightStates.homeShieldUp = false;
       debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Up Brightness -> ' + value);
       this.uplightStates.Brightness = value as number;
-      b = Buffer.from(ONEBYTEHEADER.concat([0xa8, 0x04, this.uplightStates.Brightness, 0xc0]));
+      b = ONEBYTEHEADER.concat([0xa8, 0x04, this.uplightStates.Brightness]);
     }
     clientWrite(this.client, b, this);
   }
@@ -446,7 +471,7 @@ export class BigAssFans_i6PlatformAccessory {
     if (this.fanAutoSwitchOn && this.fanStates.On) {
       return;
     }
-    clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xd8, 0x02, (this.fanStates.On ? 0x01 : 0x00), 0xc0])), this);
+    clientWrite(this.client, ONEBYTEHEADER.concat([0xd8, 0x02, (this.fanStates.On ? 0x01 : 0x00)]), this);
   }
 
   async getFanOnState(): Promise<CharacteristicValue> {
@@ -456,18 +481,18 @@ export class BigAssFans_i6PlatformAccessory {
   }
 
   async setRotationSpeed(value: CharacteristicValue) {
-    let b: Buffer;
+    let b: number[];
     if (value === 0) {
       debugLog(this, 'characteristics', 3, 'Set Characteristic RotationSpeed -> ' + (value as number) + '%');
       this.fanStates.homeShieldUp = true;
       this.fanStates.RotationSpeed = 0;
-      const b1 = ONEBYTEHEADER.concat([0xf0, 0x02, 1, 0xc0]); // this one is for the device's memory
-      const b2 = ONEBYTEHEADER.concat([0xf0, 0x02, 0, 0xc0]); // this one will actually stop rotation
-      b = Buffer.from(b1.concat(b2));
+      const b1 = ONEBYTEHEADER.concat([0xf0, 0x02, 1]); // this one is for the device's memory
+      const b2 = ONEBYTEHEADER.concat([0xf0, 0x02, 0]); // this one will actually stop rotation
+      b = b1.concat(b2);
     } else if (value === 100 && this.fanStates.homeShieldUp) {
       this.fanStates.homeShieldUp = false;
       this.fanStates.RotationSpeed = 1;
-      b = Buffer.from(ONEBYTEHEADER.concat([0xf0, 0x02, 1, 0xc0]));
+      b = ONEBYTEHEADER.concat([0xf0, 0x02, 1]);
     } else {
       this.fanStates.homeShieldUp = false;
       debugLog(this, 'characteristics', 3, 'Set Characteristic RotationSpeed -> ' + (value as number) + '%');
@@ -476,7 +501,7 @@ export class BigAssFans_i6PlatformAccessory {
         hbLog.warn(this.Name + ' - fan speed > ' + MAXFANSPEED + ': ' + this.fanStates.RotationSpeed + ', setting to ' + MAXFANSPEED);
         this.fanStates.RotationSpeed = MAXFANSPEED;
       }
-      b = Buffer.from(ONEBYTEHEADER.concat([0xf0, 0x02, this.fanStates.RotationSpeed, 0xc0]));
+      b = ONEBYTEHEADER.concat([0xf0, 0x02, this.fanStates.RotationSpeed]);
     }
     clientWrite(this.client, b, this);
   }
@@ -495,7 +520,7 @@ export class BigAssFans_i6PlatformAccessory {
     this.fanStates.RotationDirection = ((value as number) === 0 ? 1 : 0);
 
     // 0 is clockwise, 1 is counterclockwise
-    clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xe0, 0x02, this.fanStates.RotationDirection, 0xc0])), this);
+    clientWrite(this.client, ONEBYTEHEADER.concat([0xe0, 0x02, this.fanStates.RotationDirection]), this);
   }
 
   async getRotationDirection(): Promise<CharacteristicValue> {
@@ -507,15 +532,16 @@ export class BigAssFans_i6PlatformAccessory {
   // Mireds!
   async setDownColorTemperature(value: CharacteristicValue) {
     if (this.bulbCount === 2) {
-      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_DOWN, 0xc0])), this);
+      clientWrite(this.client, ONEBYTEHEADER.concat([0x90, 0x05, TARGETLIGHT_DOWN]), this);
     }
     // should maybe limit color temp to one of 5 BAF supported values - 2200, 2700, 4000, 5000, 6500?
     this.downlightStates.ColorTemperature = Math.round(1000000/(value as number));
-    debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Down ColorTemperature  -> ' + value +
-        ' (' + this.downlightStates.ColorTemperature + ')');
-    const stuffedVarInt = stuff(varint_encode(this.downlightStates.ColorTemperature));
-    const firstPart = [0xc0, 0x12, stuffedVarInt.length + 6, 0x12, stuffedVarInt.length + 4, 0x1a, stuffedVarInt.length + 2, 0xb8, 0x04];
-    clientWrite(this.client, Buffer.from(firstPart.concat(stuffedVarInt, 0xc0)), this);
+    debugLog(this, ['light', 'characteristics'], [1, 3],
+      `Set Characteristic Down ColorTemperature -> ${value} (${this.downlightStates.ColorTemperature})`);
+
+    const varInt = varint_encode(this.downlightStates.ColorTemperature);
+    const firstPart = [0x12, varInt.length + 6, 0x12, varInt.length + 4, 0x1a, varInt.length + 2, 0xb8, 0x04];
+    clientWrite(this.client, firstPart.concat(varInt), this);
   }
 
   async getDownColorTemperature(): Promise<CharacteristicValue> {
@@ -531,8 +557,8 @@ export class BigAssFans_i6PlatformAccessory {
   //   debugLog(this, ['light', 'characteristics'], [1, 3], 'Set Characteristic Up ColorTemperature  -> ' + value +
   //       ' (' + this.uplightStates.ColorTemperature + ')');
   //   const stuffedVarInt = stuff(varint_encode(this.uplightStates.ColorTemperature));
-  //   const firstPart = [0xc0, 0x12, stuffedVarInt.length + 6, 0x12, stuffedVarInt.length + 4, 0x1a, stuffedVarInt.length + 2, 0xb8, 0x04];
-  //   clientWrite(this.client, Buffer.from(firstPart.concat(stuffedVarInt, 0xc0)), this);
+  //   const firstPart = [0x12, stuffedVarInt.length + 6, 0x12, stuffedVarInt.length + 4, 0x1a, stuffedVarInt.length + 2, 0xb8, 0x04];
+  //   clientWrite(this.client, firstPart.concat(stuffedVarInt), this);
   // }
 
   // async getUpColorTemperature(): Promise<CharacteristicValue> {
@@ -546,8 +572,7 @@ export class BigAssFans_i6PlatformAccessory {
   async setWhooshSwitchOnState(value: CharacteristicValue) {
     debugLog(this, 'characteristics', 3, 'Set Characteristic Whoosh Switch On -> ' + value);
     this.whooshSwitchOn = value as boolean;
-    clientWrite(this.client,
-      Buffer.from(ONEBYTEHEADER.concat([0xd0, 0x03, (this.whooshSwitchOn ? 0x01 : 0x00), 0xc0])), this);
+    clientWrite(this.client, ONEBYTEHEADER.concat([0xd0, 0x03, (this.whooshSwitchOn ? 0x01 : 0x00)]), this);
   }
 
   async getWhooshSwitchOnState(): Promise<CharacteristicValue> {
@@ -560,7 +585,7 @@ export class BigAssFans_i6PlatformAccessory {
   async setDimToWarmSwitchOnState(value: CharacteristicValue) {
     debugLog(this, 'characteristics', 3, 'Set Characteristic Dim to Warm Switch On -> ' + value);
     this.dimToWarmSwitchOn = value as boolean;
-    clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xe8, 0x04, (this.dimToWarmSwitchOn ? 0x01 : 0x00), 0xc0])), this);
+    clientWrite(this.client, ONEBYTEHEADER.concat([0xe8, 0x04, (this.dimToWarmSwitchOn ? 0x01 : 0x00)]), this);
   }
 
   async getDimToWarmSwitchOnState(): Promise<CharacteristicValue> {
@@ -574,7 +599,7 @@ export class BigAssFans_i6PlatformAccessory {
     debugLog(this, 'characteristics', 3, 'Set Characteristic Fan Auto Switch On -> ' + value);
     this.fanAutoSwitchOn = value as boolean;
     if (this.fanAutoSwitchOn) {
-      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xd8, 0x02, 0x02, 0xc0])), this);
+      clientWrite(this.client, ONEBYTEHEADER.concat([0xd8, 0x02, 0x02]), this);
     } else {
       // in order for fan to turn auto off, we need to tell it to be on or off
       this.setFanOnState(this.fanStates.On);
@@ -593,9 +618,9 @@ export class BigAssFans_i6PlatformAccessory {
     this.lightAutoSwitchOn = value as boolean;
 
     if (this.lightAutoSwitchOn) {
-      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, 0x02, 0xc0])), this);
+      clientWrite(this.client, ONEBYTEHEADER.concat([0xa0, 0x04, 0x02]), this);
     } else {
-      clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xa0, 0x04, (this.downlightStates.On ? 0x01 : 0x00), 0xc0])), this);
+      clientWrite(this.client, ONEBYTEHEADER.concat([0xa0, 0x04, (this.downlightStates.On ? 0x01 : 0x00)]), this);
     }
   }
 
@@ -609,7 +634,7 @@ export class BigAssFans_i6PlatformAccessory {
   async setEcoModeSwitchOnState(value: CharacteristicValue) {
     debugLog(this, 'characteristics', 3, 'Set Characteristic Eco Mode Switch On -> ' + value);
     this.ecoModeSwitchOn = value as boolean;
-    clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0x88, 0x04, (this.ecoModeSwitchOn ? 0x01 : 0x0), 0xc0])), this);
+    clientWrite(this.client, ONEBYTEHEADER.concat([0x88, 0x04, (this.ecoModeSwitchOn ? 0x01 : 0x0)]), this);
   }
 
   async getEcoModeSwitchOnState(): Promise<CharacteristicValue> {
@@ -634,7 +659,7 @@ export class BigAssFans_i6PlatformAccessory {
   async setUVCSwitchOnState(value: CharacteristicValue) {
     debugLog(this, 'characteristics', 3, 'Set Characteristic UVC Switch On -> ' + value);
     this.UVCSwitchOn = value as boolean;
-    clientWrite(this.client, Buffer.from(ONEBYTEHEADER.concat([0xe0, 0x0a, (this.UVCSwitchOn ? 0x01 : 0x0), 0xc0])), this);
+    clientWrite(this.client, ONEBYTEHEADER.concat([0xe0, 0x0a, (this.UVCSwitchOn ? 0x01 : 0x0)]), this);
   }
 
   async getUVCSwitchOnState(): Promise<CharacteristicValue> {
@@ -642,13 +667,135 @@ export class BigAssFans_i6PlatformAccessory {
     debugLog(this, 'characteristics', 3, 'Get Characteristic UVC Switch On -> ' + isOn);
     return isOn;
   }
+
+  // set/get won't be called unless standbyLED is detected
+  // On means enabled, off means disabled
+  async setStandbyLEDEnabledSwitchOnState(value: CharacteristicValue) {
+    debugLog(this, ['newcode', 'characteristics'], [1, 3], 'Set Characteristic StandbyLED Enabled Switch On -> ' + value);
+    this.standbyLEDEnabledSwitchOn = value as boolean;
+    // clientWrite(this.client,
+    //  [0x0c, 0x12, 0x0d, 0x12, 0x0b, 0x1a, 0x09, 0x9a, 0x05, 0x06, 0x08, 0x09, 0x10, 0x01, 0x18, 0x30, 0x0c], this);
+    clientWrite(this.client,
+      [0x0c, 0x12, 0x09, 0x12, 0x07, 0x1a, 0x05, 0x9a, 0x05, 0x02, 0x10, this.standbyLEDEnabledSwitchOn, 0x0c], this);
+
+    // if (this.standbyLEDEnabledSwitchOn) {
+    //   debugLog(this, 'newcode', 1, 'setStandbyLEDEnabledSwitchOnState: call makeStandbyLED');
+    //   makeStandbyLED(this);
+    // } else {
+    //   debugLog(this, 'newcode', 1, `setStandbyLEDEnabledSwitchOnState: call zapService(this, 'standbyLED'`);
+    //   zapService(this, 'standbyLED');
+    // }
+  }
+
+  async getStandbyLEDEnabledSwitchOnState(): Promise<CharacteristicValue> {
+    const isOn = this.standbyLEDEnabledSwitchOn;
+    debugLog(this, 'characteristics', 3, 'Get Characteristic StandbyLED Enabled Switch On -> ' + isOn);
+    return isOn;
+  }
+
+  // On/Off is actually tied to Enabled
+  // onSet - ignore
+  // onGet returns On if Enabled, else Off
+  async setStandbyLEDOnState(value: CharacteristicValue) {
+    debugLog(this, ['newcode', 'characteristics'], [1, 3], `Set Characteristic StandbyLED On -> ${value}`);
+  }
+
+  async getStandbyLEDOnState(): Promise<CharacteristicValue> {
+    debugLog(this, ['newcode', 'characteristics'], [1, 3], `Get Characteristic StandbyLED On -> ${this.standbyLEDStates.On}`);
+    return this.standbyLEDStates.On;
+  }
+
+  async setStandbyLEDBrightness(value: CharacteristicValue) {
+    this.standbyLEDStates.Brightness = value as number;
+    clientWrite(this.client,
+      [0x0c, 0x12, 0x09, 0x12, 0x07, 0x1a, 0x05, 0x9a, 0x05, 0x02, 0x18, this.standbyLEDStates.Brightness, 0x0c], this);
+  }
+
+  async getStandbyLEDBrightness(): Promise<CharacteristicValue> {
+    debugLog(this, ['newcode', 'characteristics'], [1, 4],
+      `Get Characteristic StandbyLED Brightness -> ${this.standbyLEDStates.Brightness}`);
+    return this.standbyLEDStates.Brightness;
+  }
+
+  async setStandbyLEDHue(value: CharacteristicValue) {
+    this.standbyLEDStates.Hue = value as number;
+    debugLog(this, ['newcode', 'characteristics'], [1, 3], `Set Characteristic StandbyLED Hue -> ${this.standbyLEDStates.Hue}`);
+
+    // convert hue/saturation/brightness to color
+    const rgb = HSVtoRGB(this.standbyLEDStates.Hue, this.standbyLEDStates.Saturation, this.standbyLEDStates.Brightness);
+    const red = Math.round(rgb[0]);
+    const green = Math.round(rgb[1]);
+    const blue = Math.round(rgb[2]);
+
+    // send preset: custom, and rgb values
+    clientWrite(this.client,
+      [0x0c, 0x12, 0x0f, 0x12, 0x0d, 0x1a, 0x0b, 0x9a, 0x05, 0x08, 0x08, 0x00, 0x20, red, 0x28, green, 0x30, blue, 0x0c], this);
+  }
+
+  async getStandbyLEDHue(): Promise<CharacteristicValue> {
+    debugLog(this, ['newcode', 'characteristics'], [1, 4], `Get Characteristic StandbyLED Hue -> ${this.standbyLEDStates.Hue}`);
+    return this.standbyLEDStates.Hue;
+  }
+
+  async setStandbyLEDSaturation(value: CharacteristicValue) {
+    this.standbyLEDStates.Saturation = value as number;
+    debugLog(this, ['newcode', 'characteristics'], [1, 3],
+      `Set Characteristic StandbyLED Saturation -> ${this.standbyLEDStates.Saturation}`);
+
+    // convert hue/saturation/brightness to color
+    const rgb = HSVtoRGB(this.standbyLEDStates.Hue, this.standbyLEDStates.Saturation, 100);
+    const red = Math.round(rgb[0]);
+    const green = Math.round(rgb[1]);
+    const blue = Math.round(rgb[2]);
+
+    // send preset: custom, and rgb values
+    clientWrite(this.client,
+      [0x0c, 0x12, 0x0f, 0x12, 0x0d, 0x1a, 0x0b, 0x9a, 0x05, 0x08, 0x08, 0x00, 0x20, red, 0x28, green, 0x30, blue, 0x0c], this);
+  }
+
+  async getStandbyLEDSaturation(): Promise<CharacteristicValue> {
+    debugLog(this, ['newcode', 'characteristics'], [1, 4],
+      `Get Characteristic StandbyLED Saturation -> ${this.standbyLEDStates.Saturation}`);
+    return this.standbyLEDStates.Saturation;
+  }
+}
+
+function makeStandbyLED(pA: BAF) {
+  pA.standbyLEDBulbService = pA.accessory.getService('standbyLED') ||
+  pA.accessory.addService(pA.platform.Service.Lightbulb, 'standbyLED', 'light-3');
+
+  const capitalizeName = pA.Name[0] === pA.Name[0].toUpperCase();
+  setName(pA, pA.downlightBulbService, pA.Name + (capitalizeName ? ' Night Light' : ' night light'));
+
+  // On/Off is actually tied to Enabled
+  // onSet - ignore
+  // onGet returns On if Enabled, else Off
+  pA.standbyLEDBulbService.getCharacteristic(pA.platform.Characteristic.On)
+    .onSet(pA.setStandbyLEDOnState.bind(pA))
+    .onGet(pA.getStandbyLEDOnState.bind(pA));
+
+  pA.standbyLEDBulbService.getCharacteristic(pA.platform.Characteristic.Brightness)
+    .onSet(pA.setStandbyLEDBrightness.bind(pA))
+    .onGet(pA.getStandbyLEDBrightness.bind(pA));
+
+  // pA.standbyLEDBulbService.getCharacteristic(pA.platform.Characteristic.ColorTemperature)
+  //   .onSet(pA.setStandbyLEDColorTemperature.bind(pA))
+  //   .onGet(pA.getStandbyLEDColorTemperature.bind(pA));
+
+  pA.standbyLEDBulbService.getCharacteristic(pA.platform.Characteristic.Hue)
+    .onSet(pA.setStandbyLEDHue.bind(pA))
+    .onGet(pA.getStandbyLEDHue.bind(pA));
+
+  pA.standbyLEDBulbService.getCharacteristic(pA.platform.Characteristic.Saturation)
+    .onSet(pA.setStandbyLEDSaturation.bind(pA))
+    .onGet(pA.getStandbyLEDSaturation.bind(pA));
 }
 
 function makeServices(pA: BAF) {
   const capitalizeName = pA.Name[0] === pA.Name[0].toUpperCase();
   let accessoryName:string;
 
-  debugLog(pA, 'newcode', 1, `pA.name: '${pA.Name}'`);
+  // debugLog(pA, 'newcode', 1, `pA.name: '${pA.Name}'`);
 
   pA.accessory.getService(pA.platform.Service.AccessoryInformation)!
     .setCharacteristic(pA.platform.Characteristic.Manufacturer, 'Big Ass Fans')
@@ -908,10 +1055,39 @@ function makeServices(pA: BAF) {
       hbLog.info(`'"showEcoModeSwitch": true' in config.json but this fan (${pA.Name}) does not support Eco Mode`);
     }
   } else {
-    const service = pA.accessory.getService('ecoModeSwitch');
-    if (service) {
-      pA.accessory.removeService(service);
+    // const service = pA.accessory.getService('ecoModeSwitch');
+    // if (service) {
+    //   pA.accessory.removeService(service);
+    // }
+    zapService(pA, 'ecoModeSwitch');
+  }
+
+  // looks like maybe the service name is the default name
+  // let s = pA.accessory.getService('testSwitch') ||
+  //   pA.accessory.addService(pA.platform.Service.Switch, 'testSwitch', 'switch-8');
+  // zapService(pA, 'testSwitch');
+
+  // standbyLED
+  if (pA.capabilities.hasStandbyLED && pA.showStandbyLED) {
+    pA.standbyLEDEnabledSwitchService = pA.accessory.getService('standbyEnabledSwitch') ||
+      pA.accessory.addService(pA.platform.Service.Switch, 'standbyEnabledSwitch', 'switch-7');
+    if (pA.standbyLEDEnabledSwitchService) {
+      debugLog(pA, 'newcode', 1, 'standbyLEDEnabledSwitchService: succeeded');
+    } else {
+      debugLog(pA, 'newcode', 1, 'standbyLEDEnabledSwitchService: failed');
     }
+    accessoryName = capitalizeName ?  ' Enable Night Light' : ' enable night light';
+    setName(pA, pA.standbyLEDEnabledSwitchService, pA.Name + accessoryName);
+
+    pA.standbyLEDEnabledSwitchService.getCharacteristic(pA.platform.Characteristic.On)
+      .onSet(pA.setStandbyLEDEnabledSwitchOnState.bind(pA))
+      .onGet(pA.getStandbyLEDEnabledSwitchOnState.bind(pA));
+
+    makeStandbyLED(pA);
+  } else {
+    debugLog(pA, 'newcode', 1, 'zap standbyEnabledSwitch and standbyLED');
+    zapService(pA, 'standbyEnabledSwitch');
+    zapService(pA, 'standbyLED');
   }
 
   debugLog(pA, 'progress', 1, 'leaving makeServices');
@@ -920,7 +1096,10 @@ function makeServices(pA: BAF) {
 function zapService(pA:BAF, serviceName: string) {
   const service = pA.accessory.getService(serviceName);
   if (service) {
+    debugLog(pA, 'newcode', 1, `zapService: removing ${serviceName}`);
     pA.accessory.removeService(service);
+  } else {
+    debugLog(pA, 'newcode', 1, `zapService: no service named ${serviceName}`);
   }
 }
 
@@ -942,7 +1121,7 @@ function networkSetup(pA: BAF) {
     // then clear sailing for 1+ hours so far.
     pA.probeTimeout = setInterval(( )=> {
       if (pA.client !== undefined) {
-        clientWrite(pA.client, Buffer.from([0xc0, 0x12, 0x04, 0x1a, 0x02, 0x08, 0x03, 0xc0]), pA); // parroting the BAF app
+        clientWrite(pA.client, [0x12, 0x04, 0x1a, 0x02, 0x08, 0x03], pA); // parroting the BAF app
       } else {
         debugLog(pA, 'network', 4, 'client undefined in setInterval callback');
       }
@@ -953,8 +1132,8 @@ function networkSetup(pA: BAF) {
   pA.client = net.connect(connectOptions, () => {
     debugLog(pA, ['network', 'progress'], [1, 2], 'connected!');
     pA.client.setKeepAlive(true);
-    clientWrite(pA.client, Buffer.from([0xc0, 0x12, 0x04, 0x1a, 0x02, 0x08, 0x06, 0xc0]), pA);  // get capabilities
-    clientWrite(pA.client, Buffer.from([0xc0, 0x12, 0x02, 0x1a, 0x00, 0xc0]), pA);  // BAF app seemed to send this so we will also
+    clientWrite(pA.client, [0x12, 0x04, 0x1a, 0x02, 0x08, 0x06], pA);  // get capabilities
+    clientWrite(pA.client, [0x12, 0x02, 0x1a, 0x00], pA);  // BAF app seemed to send this so we will also
   });
 
   let errHandler;
@@ -1120,14 +1299,14 @@ function onData(pA: BAF, data: Buffer) {
     // must be remaining fragment from last message
     startIndex = data.indexOf(0xc0) + 1;  // should be a starting 0xc0 here
     if (chunkFragment.length <= 0) {
-      debugLog(pA, ['newcode', 'redflags'], [1, 1], `dangling data fragment or empty message - ${startIndex} bytes ignored`);
+      debugLog(pA, 'redflags', 1, `dangling data fragment or empty message - ${startIndex} bytes ignored`);
     } else {
       const arr = [chunkFragment, data.subarray(0, startIndex)]; // startIndex serves as length here
       chunks[numChunks] = Buffer.concat(arr);
       debugLog(pA, 'network', 14, `chunkFragment ${hexFormat(chunkFragment)}`);
       debugLog(pA, 'network', 14, `data.subarray(0, ${startIndex}) ${hexFormat(data.subarray(0, startIndex))}`);
       debugLog(pA, 'network', 9, `built chunk from fragments ${hexFormat(chunks[numChunks])}`);
-      debugLog(pA, 'newcode', 1, 'built chunk from fragments');
+      // debugLog(pA, 'newcode', 1, 'built chunk from fragments');
       numChunks++;
     }
   }
@@ -1139,11 +1318,11 @@ function onData(pA: BAF, data: Buffer) {
   for (let i = startIndex; i < data.length; i++) {
     if (data[i] === 0xc0) {
       if (!foundStart) {
-        debugLog(pA, ['network', 'newcode'], [9, 2], `start marker at ${i}`);
+        debugLog(pA, 'network', 9, `start marker at ${i}`);
         foundStart = true;
         startIndex = i;
       } else {
-        debugLog(pA, ['network', 'newcode'], [9, 2], `end marker at ${i}`);
+        debugLog(pA, 'network', 9, `end marker at ${i}`);
         chunks[numChunks] = data.subarray(startIndex, i+1);
         numChunks++;
         foundStart = false;
@@ -1153,7 +1332,7 @@ function onData(pA: BAF, data: Buffer) {
   }
 
   if (finalEndMarker < (data.length - 1)) {
-    debugLog(pA, ['network', 'newcode'], [9, 1], 'stashed data fragment');
+    debugLog(pA, 'network', 9, 'stashed data fragment');
     debugLog(pA, 'network', 10, `finalEndMarker: ${finalEndMarker}`);
     chunkFragment = data.subarray(finalEndMarker + 1);
     debugLog(pA, 'network', 10, `chunkFragment ${hexFormat(chunkFragment)}`);
@@ -1580,6 +1759,78 @@ function lightOccupancyDetectedState(s: string, pA:BAF) {
   }
 }
 
+function standbyColorPreset(s: string, pA:BAF) {
+  if (pA.capabilities.hasStandbyLED && pA.showStandbyLED) {
+    debugLog(pA, 'newcode', 1, `standbyColorPreset(): ${s}`);
+    const hsvPresets = [
+    // hue  sat  val
+      [  0,   0,   0],  // 0 - custom
+      [  0, 100, 100],  // 1 - red
+      [106, 100, 100],  // 2 - green
+      [220, 100, 100],  // 3 - blue
+      [180, 100, 100],  // 4 - teal
+      [ 60, 100, 100],  // 5 - yellow
+      [280, 100, 100],  // 6 - violet
+      [  0,   0, 100],  // 7 - white
+      [ 30, 100, 100],  // 8 - orange
+      [300, 100, 100],   // 9 - pink
+    ];
+
+    // whether or no there's currently a standbyLEDBulbService, we want to store the color.
+    const n = Number(s);
+    const hue = hsvPresets[n][0];
+    const saturation = hsvPresets[n][1];
+    // const value = hsvPresets[n][2];
+
+    pA.standbyLEDStates.Hue = hue;
+    pA.standbyLEDStates.Saturation = saturation;
+
+    if (pA.standbyLEDBulbService) {
+      pA.standbyLEDBulbService.updateCharacteristic(pA.platform.Characteristic.Hue, hue);
+      pA.standbyLEDBulbService.updateCharacteristic(pA.platform.Characteristic.Saturation, saturation);
+      // pA.standbyLEDBulbService.updateCharacteristic(pA.platform.Characteristic.Brightness, value);
+    }
+  }
+}
+
+function standbyLEDEnable(s: string, pA:BAF) {
+  if (pA.capabilities.hasStandbyLED && pA.showStandbyLED) {
+    debugLog(pA, ['newcode', 'characteristics'], [1, 3], `standbyLEDEnable(): ${s}`);
+    pA.standbyLEDEnabledSwitchOn = Boolean(Number(s));
+    // should we ignore the update if it's not changing state?
+    debugLog(pA, ['newcode', 'characteristics'], [1, 3], 'update standbyLEDEnabledSwitchOn: ' + pA.standbyLEDEnabledSwitchOn);
+    pA.standbyLEDEnabledSwitchService.updateCharacteristic(pA.platform.Characteristic.On, pA.standbyLEDEnabledSwitchOn);
+  }
+}
+
+function standbyLEDPercent(s: string, pA:BAF) {
+  if (pA.capabilities.hasStandbyLED && pA.showStandbyLED) {
+    debugLog(pA, 'newcode', 1, `standbyLEDPercent(): ${s}`);
+    pA.standbyLEDStates.Brightness = Number(s);
+    debugLog(pA, ['newcode', 'characteristics'], [1, 3], `update standbyLED Brightness: ${pA.standbyLEDStates.Brightness}`);
+    if (pA.standbyLEDBulbService) {
+      pA.standbyLEDBulbService.updateCharacteristic(pA.platform.Characteristic.Brightness, pA.standbyLEDStates.Brightness);
+    }
+  }
+}
+
+function standbyLEDRed(s: string, pA:BAF) {
+  if (pA.capabilities.hasStandbyLED && pA.showStandbyLED) {
+    debugLog(pA, 'newcode', 1, `ignoring standbyLEDRed(): ${s}`);
+  }
+}
+
+function standbyLEDGreen(s: string, pA:BAF) {
+  if (pA.capabilities.hasStandbyLED && pA.showStandbyLED) {
+    debugLog(pA, 'newcode', 1, `ignoring standbyLEDGreen(): ${s}`);
+  }
+}
+
+function standbyLEDBlue(s: string, pA:BAF) {
+  if (pA.capabilities.hasStandbyLED && pA.showStandbyLED) {
+    debugLog(pA, 'newcode', 1, `ignoring standbyLEDBlue(): ${s}`);
+  }
+}
 
 // keeping track to gather clues in unending effort to ID unknown codes
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1725,11 +1976,14 @@ function infoLogOnce(pA:BAF, logMessage: string) {
 }
 
 function clientWrite(client, b, pA:BAF) {
-  debugLog(pA, 'network', 7, 'sending ' + b.toString('hex'));
+  debugLog(pA, 'network', 7, `sending (unstuffed/unmarked) ${b.toString('hex')}`);
+  const stuffedBuffer = stuff(b);
   try  {
-    client.write(b);
+    const buffer = Buffer.from([0xc0].concat(stuffedBuffer).concat([0xc0]));
+    debugLog(pA, 'network', 8, `sending (stuffed/marked) ${buffer.toString('hex')}`);
+    client.write(buffer);
   } catch {
-    hbLog.warn(pA.Name + ' - clientWrite(..., ' + b.toString('hex') + ') failed');
+    hbLog.warn(`${pA.Name} - clientWrite(..., (unstuffed/unmarked) ${b.toString('hex')}) failed`);
   }
 }
 
@@ -1965,7 +2219,6 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
               case 13:  // api version (from https://github.com/jfroy/aiobafi6/blob/main/proto/aiobafi6.proto)
               case 37:  // pcba part number
               case 38:  // pcba revision
-              case 83:  // standby LED - message: 1/color reset, 2/enabled, 3/percent, 4/red, 5/green, 6/blue
               case 120: // IP address
               case 139: // wall control configuration - message: 1/top button function, 2/bottom button function (see schema)
                 [b, s] = getString(b);  // ignore
@@ -2130,7 +2383,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                       break;
                     case 13: // has standby LED
                       [b, v] = getValue(b);
-                      pA.capabilities.hasStandbyLed = Boolean(v);
+                      pA.capabilities.hasStandbyLED = Boolean(v);
                       break;
                     case 14: // has eco mode
                       [b, v] = getValue(b);
@@ -2162,11 +2415,73 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
 
                 if (!pA.capabilitiesEstablished) {
                   pA.capabilitiesEstablished = true;
-                  debugLog(pA, 'newcode', 1, 'capabilities established');
+                  debugLog(pA, 'progress', 1, 'capabilities established');
                   logCapabilities(pA);
                   makeServices(pA);
                 }
 
+                break;
+              }
+
+              case 83: {  // standby LED - message: 1/color preset, 2/enabled, 3/percent, 4/red, 5/green, 6/blue
+                [b, length] = getVarint(b);
+                const remainingLength = (b.length) - length;
+                // it seems we must assume the absence of enabled=1 means enabled=0 since turning off the night light (standbyLED)
+                // does not send a subfield 2 with a value of 0, but doesn't send subfield 2 at all.
+                let enabled = 0;
+                while (b.length > remainingLength) {
+                  [b, type, field] = getProtoElements(b);
+                  debugLog(pA, 'protoparse', 1, '        field: ' + field);
+                  switch (field) {
+                    case 1: // color preset
+                      [b, v] = getValue(b);
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
+                      debugLog(pA, 'newcode', 1, `standby LED color preset: ${v}`);
+                      funStack.push([standbyColorPreset, String(v)]);
+                      break;
+                    case 2: // enabled
+                      [b, v] = getValue(b); // ignore
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
+                      debugLog(pA, 'newcode', 1, `standby LED enabled: ${v}`);
+                      funStack.push([standbyLEDEnable, String(v)]);
+                      enabled = v;
+                      break;
+                    case 3: // percent
+                      [b, v] = getValue(b); // ignore
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
+                      debugLog(pA, 'newcode', 1, `standby LED percent: ${v}`);
+                      funStack.push([standbyLEDPercent, String(v)]);
+                      break;
+                    case 4: // red
+                      [b, v] = getValue(b); // ignore
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
+                      debugLog(pA, 'newcode', 1, `standby LED red: ${v}`);
+                      funStack.push([standbyLEDRed, String(v)]);
+                      break;
+                    case 5: // green
+                      [b, v] = getValue(b); // ignore
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
+                      debugLog(pA, 'newcode', 1, `standby LED green: ${v}`);
+                      funStack.push([standbyLEDGreen, String(v)]);
+                      break;
+                    case 6: // blue
+                      [b, v] = getValue(b); // ignore
+                      debugLog(pA, 'protoparse', 1, '          value: ' + v);
+                      debugLog(pA, 'newcode', 1, `standby LED blue: ${v}`);
+                      funStack.push([standbyLEDBlue, String(v)]);
+                      break;
+
+                    default:
+                      debugLog(pA, 'cluing', 1, 'fell into default, standby LED field: "' + field + '"');
+                      b = doUnknownField(b, type, pA);
+                      break;
+                  }
+                }
+                // see comment above
+                if (! enabled) {
+                  debugLog(pA, 'newcode', 1, `buildFunStack(): ${String(enabled)}`);
+                  funStack.push([standbyLEDEnable, String(enabled)]);
+                }
                 break;
               }
 
@@ -2667,7 +2982,7 @@ function logCapabilities(pA:BigAssFans_i6PlatformAccessory) {
   } else {
     debugLog(pA, 'capabilities', 1, 'no UV-C');
   }
-  if (c.hasStandbyLed) {
+  if (c.hasStandbyLED) {
     debugLog(pA, 'capabilities', 1, 'has standby LED');
   } else {
     debugLog(pA, 'capabilities', 1, 'no standby LED');
@@ -2727,4 +3042,36 @@ function toDaysHoursMinutesString(minutes: number) : string {
   const hours = Math.floor(minutes % (24 * 60) / 60);
 
   return `${days} ${days === 1 ? 'day' : 'days'} ${hours.toString().padStart(2, '0')}:${(minutes % 60).toString().padStart(2, '0')}`;
+}
+
+// https://www.npmjs.com/package/color-convert
+function HSVtoRGB(hue: number, saturation: number, brightness: number) {
+  const h = hue / 60;
+  const s = saturation / 100;
+  let v = brightness / 100;
+
+  const hi = Math.floor(h) % 6;
+
+  const f = h - Math.floor(h);
+  const p = 255 * v * (1 - s);
+  const q = 255 * v * (1 - (s * f));
+  const t = 255 * v * (1 - (s * (1 - f)));
+  v *= 255;
+
+  switch (hi) {
+    case 0:
+      return [v, t, p];
+    case 1:
+      return [q, v, p];
+    case 2:
+      return [p, v, t];
+    case 3:
+      return [p, q, v];
+    case 4:
+      return [t, p, v];
+    case 5:
+      return [v, p, q];
+  }
+  // this better be unreachable
+  return [0, 0, 0];
 }
