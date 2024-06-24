@@ -4,7 +4,7 @@
 <img src="https://raw.githubusercontent.com/oogje/homebridge-i6-bigAssFans/main/es6.jpeg"/>
 </h1>
 
-## homebridge-i6-bigassfans (v0.5.4)
+## homebridge-i6-bigassfans (v0.6.0)
 
 [![verified-by-homebridge](https://badgen.net/badge/homebridge/verified/purple)](https://github.com/homebridge/homebridge/wiki/Verified-Plugins)
 <!-- [![homebridge-miot](https://badgen.net/npm/v/homebridge-bigassfans-i6?icon=npm)](https://www.npmjs.com/package/homebridge-bigassfans-i6)
@@ -58,7 +58,7 @@ sudo npm install -g homebridge-i6-bigassfans
 ```
 To install a pre-release version, append it to the package name after '@'.  For example:
 ```
-sudo npm install -g homebridge-i6-bigassfans@0.3.20-beta.2
+sudo npm install -g homebridge-i6-bigassfans@0.6.0-beta9
 ```
 
 #### **Configuration**

@@ -1146,19 +1146,19 @@ function networkSetup(pA: BAF) {
     retrySeconds = backOff(err.code, retryCount);
     switch (err.code) {
       case 'ECONNREFUSED':
-        hbLog.error(`${pA.Name} (${pA.IP}) connection refused ${err.code}.  Check that the correct IP is in json.config.`);
+        hbLog.error(`${pA.Name} (${pA.IP}) connection refused ${err.code}.  Check that the correct IP is in config.json.`);
         // why clearInterval here but not in the other case that returns
         if (pA.probeTimeout !== undefined) {
           clearInterval(pA.probeTimeout);
         }
         return;
       case 'ENETUNREACH':
-        hbLog.error(pA.Name + ' (' + pA.IP + ')' + ` is unreachable [${err.code}].  Check the correct IP is in json.config.`);
+        hbLog.error(pA.Name + ' (' + pA.IP + ')' + ` is unreachable [${err.code}].  Check the correct IP is in config.json.`);
         return;
 
       case 'ETIMEDOUT':
         hbLog.error(`${pA.Name} (${pA.IP}) connection timed out [${err.code}].\n` +
-          `Check your fan has power and the correct IP in json.config. Will retry in ${retrySeconds} seconds.`);
+          `Check your fan has power and the correct IP in config.json. Will retry in ${retrySeconds} seconds.`);
         break;
       case 'EHOSTDOWN': {
         const minutes = Math.round(retrySeconds / 60);

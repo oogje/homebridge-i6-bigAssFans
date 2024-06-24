@@ -1,5 +1,8 @@
 ## Release Notes
 
+### v0.6.0
+- bug fixes, see v0.6.0 beta notes below
+
 ### v0.6.0-beta9
 - 1st crack a handling night light/standbyLED
 - stuffing messages sent to fan
