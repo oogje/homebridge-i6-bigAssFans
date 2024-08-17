@@ -313,6 +313,14 @@ export class BigAssFans_i6PlatformAccessory {
       this.enableDebugPort = true;
     }
 
+    if (accessory.context.device.showTemperature !== undefined) {
+        this.showTemperature = accessory.context.device.showTemperature;
+    }
+
+    if (accessory.context.device.showHumidity !== undefined) {
+        this.showHumidity = accessory.context.device.showHumidity;
+    }
+
     /**
     * set accessory information
     */
