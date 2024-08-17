@@ -184,7 +184,8 @@ Perhaps try running the most recent beta shown in the list of [npm versions](htt
 
 [@pponce](https://github.com/pponce), without whom there would be no Haiku implementation and a lot less testing, and for generally being an awesome collaborator and for the Haiku photo.
 
-All the users who reported issues and helped debug them, including [@aveach](https://github.com/aveach) who also made the es6 photo.
+All the users who reported issues and helped debug them, including [@aveach](https://github.com/aveach) who also made the es6 photo.  And users
+like [@knmorgan](https://github.com/knmorgan) who discovered a bug and contributed the code to fix it.
 
 [homebridge-miot](https://github.com/merdok/homebridge-miot) - whose style served as a guide.
 
