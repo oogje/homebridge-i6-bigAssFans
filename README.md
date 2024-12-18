@@ -11,17 +11,17 @@
 [![mit-license](https://badgen.net/npm/license/lodash)](https://github.com/oogje/homebridge-bigassfans-i6/blob/master/LICENSE)
 <!-- [![follow-me-on-twitter](https://badgen.net/twitter/follow/merdok_dev?icon=twitter)](https://twitter.com/merdok_dev) -->
 <!-- [![join-discord](https://badgen.net/badge/icon/discord?icon=discord&label=homebridge-xiaomi-fan)](https://discord.gg/AFYUZbk) -->
-
 </span>
 
-`homebridge-i6-bigassfans` is a plugin for Homebridge which allows you to control Big Ass Fans i6, es6, Haiku H/I Series and Haiku L Series fans with firmware version 3.0 or greater.
+`homebridge-i6-bigassfans` is a plugin for Homebridge which allows you to control Big Ass Fans i6, es6, Haiku H/I Series and Haiku L Series
+fans with firmware version 3.0 or greater.
 
 The plugin name reflects that it was created to support, and was limited to, i6 model fans when no other homebridge
 alternative was available. 
 Some time around the beginning of April 2022, with a firmware update to the Haiku series fans, Big Ass Fans changed the Haiku's
 communication protocol to be compatible with the i6 model, and therefore this plugin. 
 Having access only to an i6 fan, I collaborated with Haiku fan owners (notably @pponce) to add support for their fans. 
-I've guessed the format of the binary protocol and of the approximately eighty unique message types I've seen, I think I know what about half of them mean.  es6 seems to work as well.
+The es6 model seems to work as well.
 
 ### **Bugs**
 
@@ -195,4 +195,4 @@ like [@knmorgan](https://github.com/knmorgan) who discovered a bug and contribut
 
 [HAP-NodeJS](https://github.com/KhaosT/HAP-NodeJS) & [homebridge](https://github.com/nfarina/homebridge) - for making this possible.
 
-[Big Ass Fans](https://www.bigassfans.com) - who I hope is working on their HomeKit implementation.
+[Big Ass Fans](https://www.bigassfans.com) - for their awesome products many of which as of v3.3.1 natively support HomeKit!
