@@ -1,7 +1,10 @@
 ## Release Notes
 
+### v0.6.1-beta2
+- attempt retries on ENETUNREACH
+
 ### v0.6.1-beta1
-- insert code from knmorgan to fix issue #38
+- insert code from @knmorgan to fix issue #38
 
 ### v0.6.0
 - bug fixes, see v0.6.0 beta notes below

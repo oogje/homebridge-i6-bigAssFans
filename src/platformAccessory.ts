@@ -1163,8 +1163,11 @@ function networkSetup(pA: BAF) {
         }
         return;
       case 'ENETUNREACH':
-        hbLog.error(pA.Name + ' (' + pA.IP + ')' + ` is unreachable [${err.code}].  Check the correct IP is in config.json.`);
-        return;
+        // hbLog.error(pA.Name + ' (' + pA.IP + ')' + ` is unreachable [${err.code}].  Check the correct IP is in config.json.`);
+        hbLog.error(`${pA.Name} (${pA.IP}) is unreachable [${err.code}].\n` +
+          `Check the correct IP in config.json. Will retry in ${retrySeconds} seconds.`);
+        break;
+        // return;
 
       case 'ETIMEDOUT':
         hbLog.error(`${pA.Name} (${pA.IP}) connection timed out [${err.code}].\n` +
