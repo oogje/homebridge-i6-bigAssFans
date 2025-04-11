@@ -1,5 +1,8 @@
 ## Release Notes
 
+### v0.6.1-beta3
+- address issue #42
+
 ### v0.6.1-beta2
 - attempt retries on ENETUNREACH
 

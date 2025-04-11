@@ -89,6 +89,8 @@ export class BigAssFans_i6PlatformAccessory {
   public lightOccupancySensorService!: Service;
   public standbyLEDEnabledSwitchService!: Service;
   public standbyLEDBulbService!: Service;
+  public downlightDarkenService!: Service;
+  public downlightLightenService!: Service;
 
   // public bothlightsBulbService!: Service;
 
@@ -156,6 +158,7 @@ export class BigAssFans_i6PlatformAccessory {
   public uplightEquipped = undefined;
 
   // public bothlightsControl = false;
+  public enableIncrementalButtons = false;
 
   public enableDebugPort = false;
   public simulated = false; // for future use
@@ -188,7 +191,8 @@ export class BigAssFans_i6PlatformAccessory {
   public CurrentRelativeHumidity = 0;
 
   public bulbCount = 0;
-  public targetBulb = 0;
+  public targetBulb = -1;
+  // public targetBulbDetermined = false
   public fanOnMeansAuto = undefined;
   public lightOnMeansAuto = undefined;
 
@@ -280,6 +284,10 @@ export class BigAssFans_i6PlatformAccessory {
     }
     if (accessory.context.device.showEcoModeSwitch) {
       this.showEcoModeSwitch = true;  // defaults to false in property initialization
+    }
+
+    if (accessory.context.device.enableIncrementalButtons) {
+      this.enableIncrementalButtons = true;  // defaults to false in property initialization
     }
 
     if (accessory.context.device.probeFrequency !== undefined) {
@@ -768,6 +776,43 @@ export class BigAssFans_i6PlatformAccessory {
       `Get Characteristic StandbyLED Saturation -> ${this.standbyLEDStates.Saturation}`);
     return this.standbyLEDStates.Saturation;
   }
+
+  async setDownlightDarkenServiceOnState(value: CharacteristicValue) {
+    debugLog(this, ['newcode', 'characteristics'], [1, 4], 'Triggered setDownlightDarkenServiceOnState');
+    if (value) {
+      // Reset the switch to OFF after a short delay to simulate a "button"
+      setTimeout(() => {
+        this.downlightDarkenService.updateCharacteristic(this.platform.Characteristic.On, false);
+        debugLog(this, ['newcode', 'characteristics'], [1, 4], 'reset downlightDarken switch');
+      }, 500); // half a second
+    }
+
+    let b = this.downlightStates.Brightness;
+    b = b - 10;
+    if (b <= 0) {
+      this.setDownLightOnState(false);
+    } else {
+      this.setDownBrightness(b);
+    }
+  }
+
+  async setDownlightLightenServiceOnState(value: CharacteristicValue) {
+    debugLog(this, ['newcode', 'characteristics'], [1, 4], 'Triggered setDownlightLightenServiceOnState');
+    if (value) {
+      // Reset the switch to OFF after a short delay to simulate a "button"
+      setTimeout(() => {
+        this.downlightLightenService.updateCharacteristic(this.platform.Characteristic.On, false);
+        debugLog(this, ['newcode', 'characteristics'], [1, 4], 'reset downlightLighten switch');
+      }, 500); // half a second
+    }
+
+    let b = this.downlightStates.Brightness;
+    b = b + 10;
+    if (b > 100) {
+      b = 100;
+    }
+    this.setDownBrightness(b);
+  }
 }
 
 function makeStandbyLED(pA: BAF) {
@@ -1100,16 +1145,36 @@ function makeServices(pA: BAF) {
     zapService(pA, 'standbyLED');
   }
 
+  debugLog(pA, 'newcode', 1, `enableIncrementalButtons is ${pA.enableIncrementalButtons}`);
+  if (pA.enableIncrementalButtons) {
+    pA.downlightDarkenService = pA.accessory.getService('downlightDarkenButton') ||
+      pA.accessory.addService(pA.platform.Service.Switch, 'downlightDarkenButton', 'button-1');
+    accessoryName = capitalizeName ?  ' Darken Downlight' : ' darken downlight';
+    setName(pA, pA.downlightDarkenService, pA.Name + accessoryName);
+
+    pA.downlightDarkenService.getCharacteristic(pA.platform.Characteristic.On)
+      .onSet(pA.setDownlightDarkenServiceOnState.bind(pA));
+
+    pA.downlightLightenService = pA.accessory.getService('downlightLightenButton') ||
+      pA.accessory.addService(pA.platform.Service.Switch, 'downlightLightenButton', 'button-2');
+    accessoryName = capitalizeName ?  ' Lighten Downlight' : ' lighten downlight';
+    setName(pA, pA.downlightLightenService, pA.Name + accessoryName);
+
+    pA.downlightLightenService.getCharacteristic(pA.platform.Characteristic.On)
+      .onSet(pA.setDownlightLightenServiceOnState.bind(pA));
+
+  } else {
+    zapService(pA, 'downlightDarkenService');
+    zapService(pA, 'downlightLightenService');
+  }
+
   debugLog(pA, 'progress', 1, 'leaving makeServices');
 }
 
 function zapService(pA:BAF, serviceName: string) {
   const service = pA.accessory.getService(serviceName);
   if (service) {
-    debugLog(pA, 'newcode', 1, `zapService: removing ${serviceName}`);
     pA.accessory.removeService(service);
-  } else {
-    debugLog(pA, 'newcode', 1, `zapService: no service named ${serviceName}`);
   }
 }
 
@@ -1299,6 +1364,7 @@ function backOff(errorMsgString: string, retryCount: number) : number {
 */
 
 let chunkFragment: Buffer = Buffer.alloc(0);
+let funQueue: funCall[] = [];
 
 function onData(pA: BAF, data: Buffer) {
   debugLog(pA, 'network', 8, `accessory client got: ${data.length} ${(data.length === 1 ? ' byte' : ' bytes')}`);
@@ -1364,13 +1430,28 @@ function onData(pA: BAF, data: Buffer) {
     debugLog(pA, 'network', 11, 'raw (unstuffed) chunks[' + i + ']: ' + hexFormat(unstuff(chunks[i])));
 
     const funStack: funCall[] = buildFunStack(unstuff(chunks[i]), pA);
-    debugLog(pA, 'funstack', (funStack.length === 0) ? 2 : 1, `funstack.length: ${funStack.length}`);
-    debugLog(pA, 'funstack', 1, `pA.capabilitiesEstablished: ${pA.capabilitiesEstablished}`);
-    if (pA.capabilitiesEstablished) {
+    if (pA.targetBulb === -1) {
       funStack.forEach((value) => {
-        debugLog(pA, 'funstack', 1, `  ${value[0].name}(${value[1]})`);
-        value[0](value[1], pA);
+        debugLog(pA, 'funstack', 1, `targetBulb === -1  ${value[0].name}(${value[1]})`);
       });
+      funQueue.push(...funStack);
+    } else {
+
+      debugLog(pA, 'funstack', (funStack.length === 0) ? 2 : 1, `funstack.length: ${funStack.length}`);
+      debugLog(pA, 'funstack', 1, `pA.capabilitiesEstablished: ${pA.capabilitiesEstablished}`);
+      if (pA.capabilitiesEstablished) {
+        funQueue.forEach((value) => {
+          debugLog(pA, 'funstack', 1, `funQueue.length:  ${funQueue.length})`);
+          debugLog(pA, 'funstack', 1, `funQueue:  ${value[0].name}(${value[1]})`);
+          value[0](value[1], pA);
+        });
+        funQueue = [];
+
+        funStack.forEach((value) => {
+          debugLog(pA, 'funstack', 1, `  ${value[0].name}(${value[1]})`);
+          value[0](value[1], pA);
+        });
+      }
     }
   }
 }
@@ -1395,14 +1476,14 @@ function sortFunction(a, b) {
 //   service.setCharacteristic(pA.platform.Characteristic.ConfiguredName, name);
 // }
 function setName(pA: BAF, service: Service, name: string) {
-  debugLog(pA, 'newcode', 1, `setName(pA, service, '${name}'`);
+  // debugLog(pA, 'newcode', 1, `setName(pA, service, '${name}'`);
 
   service.setCharacteristic(pA.platform.Characteristic.Name, name);
 
   if (!service.testCharacteristic(pA.platform.Characteristic.ConfiguredName)) {
-    debugLog(pA, 'newcode', 1, '  service.addCharacteristic(platform.Characteristic.ConfiguredName)');
+    // debugLog(pA, 'newcode', 1, '  service.addCharacteristic(platform.Characteristic.ConfiguredName)');
     service.addCharacteristic(pA.platform.Characteristic.ConfiguredName);
-    debugLog(pA, 'newcode', 1, `  service.setCharacteristic(platform.Characteristic.ConfiguredName, ${name})`);
+    // debugLog(pA, 'newcode', 1, `  service.setCharacteristic(platform.Characteristic.ConfiguredName, ${name})`);
     service.setCharacteristic(pA.platform.Characteristic.ConfiguredName, name);
   }
 }
@@ -2182,8 +2263,11 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 [b, v] = getValue(b);
                 debugLog(pA, 'light', 1, `buildFunStack - target bulb: ${v}`);
                 funStack.splice(0, 0, [setTargetBulb, String(v)]);
-                debugLog(pA, 'light', 2, 'inserted setTargetBulb at start of funStack');
+                debugLog(pA, 'light', 1, 'inserted setTargetBulb at start of funStack');
                 // funStack.push([setTargetBulb, String(v)]);
+
+                setTargetBulb(String(v), pA);
+
                 break;
               case 85:  // light occupied
                 [b, v] = getValue(b);
@@ -2492,7 +2576,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 }
                 // see comment above
                 if (! enabled) {
-                  debugLog(pA, 'newcode', 1, `buildFunStack(): ${String(enabled)}`);
+                  debugLog(pA, 'newcode', 1, `buildFunStack(): "${String(enabled)}"`);
                   funStack.push([standbyLEDEnable, String(enabled)]);
                 }
                 break;
