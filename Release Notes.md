@@ -1,5 +1,8 @@
 ## Release Notes
 
+### v0.6.1-beta4
+- address issue #42 take 2
+
 ### v0.6.1-beta3
 - address issue #42
 

@@ -790,10 +790,11 @@ export class BigAssFans_i6PlatformAccessory {
     let b = this.downlightStates.Brightness;
     b = b - 10;
     if (b <= 0) {
-      this.setDownLightOnState(false);
-    } else {
-      this.setDownBrightness(b);
+      b = 0;
     }
+    this.setDownBrightness(b);
+    lightBrightness(String(b), this);
+    lightOnState(String(b === 0 ? b : 1), this);
   }
 
   async setDownlightLightenServiceOnState(value: CharacteristicValue) {
@@ -812,6 +813,8 @@ export class BigAssFans_i6PlatformAccessory {
       b = 100;
     }
     this.setDownBrightness(b);
+    lightBrightness(String(b), this);
+    lightOnState(String(b === 0 ? b : 1), this);
   }
 }
 
