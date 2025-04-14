@@ -159,6 +159,7 @@ export class BigAssFans_i6PlatformAccessory {
 
   // public bothlightsControl = false;
   public enableIncrementalButtons = false;
+  public incrementalButtonsDelay = 500;
 
   public enableDebugPort = false;
   public simulated = false; // for future use
@@ -288,6 +289,10 @@ export class BigAssFans_i6PlatformAccessory {
 
     if (accessory.context.device.enableIncrementalButtons) {
       this.enableIncrementalButtons = true;  // defaults to false in property initialization
+    }
+    if (accessory.context.device.incrementalButtonsDelay) {
+      this.incrementalButtonsDelay = accessory.context.device.incrementalButtonsDelay; // overrides dfault setting
+      debugLog(this, 'light', 1, `incrementalButtonsDelay: ${this.incrementalButtonsDelay}`);
     }
 
     if (accessory.context.device.probeFrequency !== undefined) {
@@ -783,12 +788,12 @@ export class BigAssFans_i6PlatformAccessory {
       // Reset the switch to OFF after a short delay to simulate a "button"
       setTimeout(() => {
         this.downlightDarkenService.updateCharacteristic(this.platform.Characteristic.On, false);
-        debugLog(this, ['newcode', 'characteristics'], [1, 4], 'reset downlightDarken switch');
-      }, 500); // half a second
+        debugLog(this, ['newcode', 'characteristics'], [1, 4], `reset downlightDarken switch, delay ${this.incrementalButtonsDelay} ms`);
+      }, this.incrementalButtonsDelay);
     }
 
     let b = this.downlightStates.Brightness;
-    b = b - 10;
+    b = b - (this.downlightStates.On ? 10 : 0);
     if (b <= 0) {
       b = 0;
     }
@@ -803,12 +808,12 @@ export class BigAssFans_i6PlatformAccessory {
       // Reset the switch to OFF after a short delay to simulate a "button"
       setTimeout(() => {
         this.downlightLightenService.updateCharacteristic(this.platform.Characteristic.On, false);
-        debugLog(this, ['newcode', 'characteristics'], [1, 4], 'reset downlightLighten switch');
-      }, 500); // half a second
+        debugLog(this, ['newcode', 'characteristics'], [1, 4], `reset downlightLighten switch, delay ${this.incrementalButtonsDelay} ms`);
+      }, this.incrementalButtonsDelay);
     }
 
     let b = this.downlightStates.Brightness;
-    b = b + 10;
+    b = b + (this.downlightStates.On ? 10 : 0);
     if (b > 100) {
       b = 100;
     }
