@@ -793,13 +793,20 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     let b = this.downlightStates.Brightness;
-    b = b - (this.downlightStates.On ? 10 : 0);
-    if (b <= 0) {
-      b = 0;
+    if (b < 10 && this.downlightStates.On === false) {
+      return;
     }
-    this.setDownBrightness(b);
-    lightBrightness(String(b), this);
-    lightOnState(String(b === 0 ? b : 1), this);
+    if (this.downlightStates.On) {
+      b = b - 10;
+    }
+    debugLog(this, 'newcode', 1, `setDownlightDarkenServiceOnState, b: ${b}`);
+    if (b <= 0) {
+      this.setDownLightOnState(false);
+      lightOnState(String(0), this);
+    } else {
+      this.setDownBrightness(b);
+      lightBrightness(String(b), this);
+    }
   }
 
   async setDownlightLightenServiceOnState(value: CharacteristicValue) {
@@ -813,13 +820,15 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     let b = this.downlightStates.Brightness;
+    debugLog(this, 'newcode', 1, `setDownlightLightenServiceOnState, b: ${b}`);
+    debugLog(this, 'newcode', 1, `setDownlightLightenServiceOnState, this.downlightStates.On: ${this.downlightStates.On}`);
     b = b + (this.downlightStates.On ? 10 : 0);
     if (b > 100) {
       b = 100;
     }
     this.setDownBrightness(b);
     lightBrightness(String(b), this);
-    lightOnState(String(b === 0 ? b : 1), this);
+    lightOnState(String(1), this);
   }
 }
 
