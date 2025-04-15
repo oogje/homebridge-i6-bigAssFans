@@ -793,7 +793,7 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     let b = this.downlightStates.Brightness;
-    if (b < 10 && this.downlightStates.On === false) {
+    if (b <= 10 && this.downlightStates.On === false) {
       return;
     }
     if (this.downlightStates.On) {
@@ -801,8 +801,8 @@ export class BigAssFans_i6PlatformAccessory {
     }
     debugLog(this, 'newcode', 1, `setDownlightDarkenServiceOnState, b: ${b}`);
     if (b <= 0) {
-      this.setDownLightOnState(false);
       lightOnState(String(0), this);
+      this.setDownLightOnState(false);
     } else {
       this.setDownBrightness(b);
       lightBrightness(String(b), this);
@@ -826,8 +826,8 @@ export class BigAssFans_i6PlatformAccessory {
     if (b > 100) {
       b = 100;
     }
-    this.setDownBrightness(b);
     lightBrightness(String(b), this);
+    this.setDownBrightness(b);
     lightOnState(String(1), this);
   }
 }
