@@ -91,6 +91,8 @@ export class BigAssFans_i6PlatformAccessory {
   public standbyLEDBulbService!: Service;
   public downlightDarkenService!: Service;
   public downlightLightenService!: Service;
+  public fanSlowerService!: Service;
+  public fanFasterService!: Service;
 
   // public bothlightsBulbService!: Service;
 
@@ -506,7 +508,7 @@ export class BigAssFans_i6PlatformAccessory {
   async setRotationSpeed(value: CharacteristicValue) {
     let b: number[];
     if (value === 0) {
-      debugLog(this, 'characteristics', 3, 'Set Characteristic RotationSpeed -> ' + (value as number) + '%');
+      debugLog(this, ['characteristics', 'newcode'], [3, 1], 'Set Characteristic RotationSpeed -> ' + (value as number) + '%');
       this.fanStates.homeShieldUp = true;
       this.fanStates.RotationSpeed = 0;
       const b1 = ONEBYTEHEADER.concat([0xf0, 0x02, 1]); // this one is for the device's memory
@@ -518,7 +520,7 @@ export class BigAssFans_i6PlatformAccessory {
       b = ONEBYTEHEADER.concat([0xf0, 0x02, 1]);
     } else {
       this.fanStates.homeShieldUp = false;
-      debugLog(this, 'characteristics', 3, 'Set Characteristic RotationSpeed -> ' + (value as number) + '%');
+      debugLog(this, ['characteristics', 'newcode'], [3, 1], 'Set Characteristic RotationSpeed -> ' + (value as number) + '%');
       this.fanStates.RotationSpeed = Math.round(((value as number) / 100) * MAXFANSPEED);
       if (this.fanStates.RotationSpeed > MAXFANSPEED) {
         hbLog.warn(this.Name + ' - fan speed > ' + MAXFANSPEED + ': ' + this.fanStates.RotationSpeed + ', setting to ' + MAXFANSPEED);
@@ -534,7 +536,7 @@ export class BigAssFans_i6PlatformAccessory {
     if (rotationPercent === 0) {
       rotationPercent = 1;
     }
-    debugLog(this, 'characteristics', 4, 'Get Characteristic RotationSpeed -> ' + rotationPercent + '%');
+    debugLog(this, ['characteristics', 'newcode'], [4, 1], 'Get Characteristic RotationSpeed -> ' + rotationPercent + '%');
     return rotationPercent;
   }
 
@@ -829,6 +831,55 @@ export class BigAssFans_i6PlatformAccessory {
     lightBrightness(String(b), this);
     this.setDownBrightness(b);
     lightOnState(String(1), this);
+  }
+
+  async setFanSlowerServiceOnState(value: CharacteristicValue) {
+    debugLog(this, ['newcode', 'characteristics'], [1, 4], 'Triggered setFanSlowerServiceOnState');
+    if (value) {
+      // Reset the switch to OFF after a short delay to simulate a "button"
+      setTimeout(() => {
+        this.fanSlowerService.updateCharacteristic(this.platform.Characteristic.On, false);
+        debugLog(this, ['newcode', 'characteristics'], [1, 4], `reset fanSlower switch, delay ${this.incrementalButtonsDelay} ms`);
+      }, this.incrementalButtonsDelay);
+    }
+
+    let b = this.fanStates.RotationSpeed;
+    if (b <= 1 && this.fanStates.On === false) {
+      return;
+    }
+    if (this.fanStates.On) {
+      b = b - 1;
+    }
+    debugLog(this, 'newcode', 1, `setFanSlowerServiceOnState, b: ${b}`);
+    if (b <= 0) {
+      fanOnState(String(0), this);
+      this.setFanOnState(false);
+    } else {
+      this.setRotationSpeed(Math.round((b / MAXFANSPEED) * 100));
+      fanRotationSpeed(String(b), this);
+    }
+  }
+
+  async setFanFasterServiceOnState(value: CharacteristicValue) {
+    debugLog(this, ['newcode', 'characteristics'], [1, 4], 'Triggered setFanFasterServiceOnState');
+    if (value) {
+      // Reset the switch to OFF after a short delay to simulate a "button"
+      setTimeout(() => {
+        this.fanFasterService.updateCharacteristic(this.platform.Characteristic.On, false);
+        debugLog(this, ['newcode', 'characteristics'], [1, 4], `reset fanFasterService switch, delay ${this.incrementalButtonsDelay} ms`);
+      }, this.incrementalButtonsDelay);
+    }
+
+    let b = this.fanStates.RotationSpeed;
+    debugLog(this, 'newcode', 1, `setFanFasterServiceOnState, b: ${b}`);
+    debugLog(this, 'newcode', 1, `setFanFasterServiceOnState, this.fanStates.On: ${this.fanStates.On}`);
+    b = b + (this.fanStates.On ? 1 : 0);
+    if (b > 7) {
+      b = 7;
+    }
+    fanRotationSpeed(String(b), this);
+    this.setRotationSpeed(Math.round((b / MAXFANSPEED) * 100));
+    fanOnState(String(1), this);
   }
 }
 
@@ -1180,9 +1231,27 @@ function makeServices(pA: BAF) {
     pA.downlightLightenService.getCharacteristic(pA.platform.Characteristic.On)
       .onSet(pA.setDownlightLightenServiceOnState.bind(pA));
 
+    pA.fanSlowerService = pA.accessory.getService('fanSlowerButton') ||
+      pA.accessory.addService(pA.platform.Service.Switch, 'fanSlowerButton', 'button-3');
+    accessoryName = capitalizeName ?  ' Slower' : ' slower';
+    setName(pA, pA.fanSlowerService, pA.Name + accessoryName);
+
+    pA.fanSlowerService.getCharacteristic(pA.platform.Characteristic.On)
+      .onSet(pA.setFanSlowerServiceOnState.bind(pA));
+
+    pA.fanFasterService = pA.accessory.getService('fanFasterButton') ||
+      pA.accessory.addService(pA.platform.Service.Switch, 'fanFasterButton', 'button-4');
+    accessoryName = capitalizeName ?  ' Faster' : ' faster';
+    setName(pA, pA.fanFasterService, pA.Name + accessoryName);
+
+    pA.fanFasterService.getCharacteristic(pA.platform.Characteristic.On)
+      .onSet(pA.setFanFasterServiceOnState.bind(pA));
+
   } else {
     zapService(pA, 'downlightDarkenService');
     zapService(pA, 'downlightLightenService');
+    zapService(pA, 'fanSlowerService');
+    zapService(pA, 'fanFasterService');
   }
 
   debugLog(pA, 'progress', 1, 'leaving makeServices');
@@ -1725,21 +1794,21 @@ function fanRotationSpeed(s: string, pA:BAF) {
   if (value !== 0) { // don't tell homebridge speed is zero, it only confuses it.  It'll find out it's off in due course.
     pA.fanStates.homeShieldUp = false;
     pA.fanStates.RotationSpeed = (value as number);
-    debugLog(pA, 'characteristics', 3, 'set speed to ' + pA.fanStates.RotationSpeed);
+    debugLog(pA, ['characteristics', 'newcode'], [3, 1], 'set speed to ' + pA.fanStates.RotationSpeed);
     // convert to percentage for homekit
     const speedPercent = Math.round((pA.fanStates.RotationSpeed / MAXFANSPEED) * 100);
-    debugLog(pA, 'characteristics', 3, 'update RotationSpeed: ' + speedPercent + '%');
+    debugLog(pA, ['characteristics', 'newcode'], [3, 1], 'update RotationSpeed: ' + speedPercent + '%');
     pA.fanService.updateCharacteristic(pA.platform.Characteristic.RotationSpeed, speedPercent);
 
     if (!pA.fanStates.On) {
       pA.fanStates.On = true;
-      debugLog(pA, 'characteristics', 3, 'update FanOn: ' + pA.fanStates.On + ' because (auto && speed > 0)');
+      debugLog(pA, ['characteristics', 'newcode'], [3, 1], 'update FanOn: ' + pA.fanStates.On + ' because (auto && speed > 0)');
       pA.fanService.updateCharacteristic(pA.platform.Characteristic.On, pA.fanStates.On);
     }
   } else {
     if (pA.fanStates.On) {
       pA.fanStates.On = false;
-      debugLog(pA, 'characteristics', 3, 'update FanOn: ' + pA.fanStates.On + ' because (auto && speed == 0)');
+      debugLog(pA, ['characteristics', 'newcode'], [3, 1], 'update FanOn: ' + pA.fanStates.On + ' because (auto && speed == 0)');
       pA.fanService.updateCharacteristic(pA.platform.Characteristic.On, pA.fanStates.On);
     }
   }

@@ -1,5 +1,8 @@
 ## Release Notes
 
+### v0.6.1-beta8
+- address issue #42 now the fan
+
 ### v0.6.1-beta7
 - address issue #42 take a guess
 
