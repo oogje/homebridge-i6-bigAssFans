@@ -1,5 +1,8 @@
 ## Release Notes
 
+### v0.6.1-beta9
+- address issue #38 if no humidity capability, remove humidity service if it exists.
+
 ### v0.6.1-beta8
 - address issue #42 now the fan
 

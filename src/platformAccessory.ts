@@ -1143,6 +1143,11 @@ function makeServices(pA: BAF) {
         pA.accessory.removeService(service);
       }
     }
+  } else {
+    const service = pA.accessory.getService(pA.platform.Service.HumiditySensor);
+    if (service) {
+      pA.accessory.removeService(service);
+    }
   }
 
   if (pA.showLightAutoSwitch) {
