@@ -89,6 +89,10 @@ export class BigAssFans_i6PlatformAccessory {
   public lightOccupancySensorService!: Service;
   public standbyLEDEnabledSwitchService!: Service;
   public standbyLEDBulbService!: Service;
+  public downlightDarkenService!: Service;
+  public downlightLightenService!: Service;
+  public fanSlowerService!: Service;
+  public fanFasterService!: Service;
 
   // public bothlightsBulbService!: Service;
 
@@ -156,6 +160,8 @@ export class BigAssFans_i6PlatformAccessory {
   public uplightEquipped = undefined;
 
   // public bothlightsControl = false;
+  public enableIncrementalButtons = false;
+  public incrementalButtonsDelay = 500;
 
   public enableDebugPort = false;
   public simulated = false; // for future use
@@ -188,7 +194,8 @@ export class BigAssFans_i6PlatformAccessory {
   public CurrentRelativeHumidity = 0;
 
   public bulbCount = 0;
-  public targetBulb = 0;
+  public targetBulb = -1;
+  // public targetBulbDetermined = false
   public fanOnMeansAuto = undefined;
   public lightOnMeansAuto = undefined;
 
@@ -280,6 +287,14 @@ export class BigAssFans_i6PlatformAccessory {
     }
     if (accessory.context.device.showEcoModeSwitch) {
       this.showEcoModeSwitch = true;  // defaults to false in property initialization
+    }
+
+    if (accessory.context.device.enableIncrementalButtons) {
+      this.enableIncrementalButtons = true;  // defaults to false in property initialization
+    }
+    if (accessory.context.device.incrementalButtonsDelay) {
+      this.incrementalButtonsDelay = accessory.context.device.incrementalButtonsDelay; // overrides dfault setting
+      debugLog(this, 'light', 1, `incrementalButtonsDelay: ${this.incrementalButtonsDelay}`);
     }
 
     if (accessory.context.device.probeFrequency !== undefined) {
@@ -491,7 +506,7 @@ export class BigAssFans_i6PlatformAccessory {
   async setRotationSpeed(value: CharacteristicValue) {
     let b: number[];
     if (value === 0) {
-      debugLog(this, 'characteristics', 3, 'Set Characteristic RotationSpeed -> ' + (value as number) + '%');
+      debugLog(this, ['characteristics', 'newcode'], [3, 1], 'Set Characteristic RotationSpeed -> ' + (value as number) + '%');
       this.fanStates.homeShieldUp = true;
       this.fanStates.RotationSpeed = 0;
       const b1 = ONEBYTEHEADER.concat([0xf0, 0x02, 1]); // this one is for the device's memory
@@ -503,7 +518,7 @@ export class BigAssFans_i6PlatformAccessory {
       b = ONEBYTEHEADER.concat([0xf0, 0x02, 1]);
     } else {
       this.fanStates.homeShieldUp = false;
-      debugLog(this, 'characteristics', 3, 'Set Characteristic RotationSpeed -> ' + (value as number) + '%');
+      debugLog(this, ['characteristics', 'newcode'], [3, 1], 'Set Characteristic RotationSpeed -> ' + (value as number) + '%');
       this.fanStates.RotationSpeed = Math.round(((value as number) / 100) * MAXFANSPEED);
       if (this.fanStates.RotationSpeed > MAXFANSPEED) {
         hbLog.warn(this.Name + ' - fan speed > ' + MAXFANSPEED + ': ' + this.fanStates.RotationSpeed + ', setting to ' + MAXFANSPEED);
@@ -519,7 +534,7 @@ export class BigAssFans_i6PlatformAccessory {
     if (rotationPercent === 0) {
       rotationPercent = 1;
     }
-    debugLog(this, 'characteristics', 4, 'Get Characteristic RotationSpeed -> ' + rotationPercent + '%');
+    debugLog(this, ['characteristics', 'newcode'], [4, 1], 'Get Characteristic RotationSpeed -> ' + rotationPercent + '%');
     return rotationPercent;
   }
 
@@ -765,6 +780,104 @@ export class BigAssFans_i6PlatformAccessory {
     debugLog(this, ['newcode', 'characteristics'], [1, 4],
       `Get Characteristic StandbyLED Saturation -> ${this.standbyLEDStates.Saturation}`);
     return this.standbyLEDStates.Saturation;
+  }
+
+  async setDownlightDarkenServiceOnState(value: CharacteristicValue) {
+    debugLog(this, ['newcode', 'characteristics'], [1, 4], 'Triggered setDownlightDarkenServiceOnState');
+    if (value) {
+      // Reset the switch to OFF after a short delay to simulate a "button"
+      setTimeout(() => {
+        this.downlightDarkenService.updateCharacteristic(this.platform.Characteristic.On, false);
+        debugLog(this, ['newcode', 'characteristics'], [1, 4], `reset downlightDarken switch, delay ${this.incrementalButtonsDelay} ms`);
+      }, this.incrementalButtonsDelay);
+    }
+
+    let b = this.downlightStates.Brightness;
+    if (b <= 10 && this.downlightStates.On === false) {
+      return;
+    }
+    if (this.downlightStates.On) {
+      b = b - 10;
+    }
+    debugLog(this, 'newcode', 1, `setDownlightDarkenServiceOnState, b: ${b}`);
+    if (b <= 0) {
+      lightOnState(String(0), this);
+      this.setDownLightOnState(false);
+    } else {
+      this.setDownBrightness(b);
+      lightBrightness(String(b), this);
+    }
+  }
+
+  async setDownlightLightenServiceOnState(value: CharacteristicValue) {
+    debugLog(this, ['newcode', 'characteristics'], [1, 4], 'Triggered setDownlightLightenServiceOnState');
+    if (value) {
+      // Reset the switch to OFF after a short delay to simulate a "button"
+      setTimeout(() => {
+        this.downlightLightenService.updateCharacteristic(this.platform.Characteristic.On, false);
+        debugLog(this, ['newcode', 'characteristics'], [1, 4], `reset downlightLighten switch, delay ${this.incrementalButtonsDelay} ms`);
+      }, this.incrementalButtonsDelay);
+    }
+
+    let b = this.downlightStates.Brightness;
+    debugLog(this, 'newcode', 1, `setDownlightLightenServiceOnState, b: ${b}`);
+    debugLog(this, 'newcode', 1, `setDownlightLightenServiceOnState, this.downlightStates.On: ${this.downlightStates.On}`);
+    b = b + (this.downlightStates.On ? 10 : 0);
+    if (b > 100) {
+      b = 100;
+    }
+    lightBrightness(String(b), this);
+    this.setDownBrightness(b);
+    lightOnState(String(1), this);
+  }
+
+  async setFanSlowerServiceOnState(value: CharacteristicValue) {
+    debugLog(this, ['newcode', 'characteristics'], [1, 4], 'Triggered setFanSlowerServiceOnState');
+    if (value) {
+      // Reset the switch to OFF after a short delay to simulate a "button"
+      setTimeout(() => {
+        this.fanSlowerService.updateCharacteristic(this.platform.Characteristic.On, false);
+        debugLog(this, ['newcode', 'characteristics'], [1, 4], `reset fanSlower switch, delay ${this.incrementalButtonsDelay} ms`);
+      }, this.incrementalButtonsDelay);
+    }
+
+    let b = this.fanStates.RotationSpeed;
+    if (b <= 1 && this.fanStates.On === false) {
+      return;
+    }
+    if (this.fanStates.On) {
+      b = b - 1;
+    }
+    debugLog(this, 'newcode', 1, `setFanSlowerServiceOnState, b: ${b}`);
+    if (b <= 0) {
+      fanOnState(String(0), this);
+      this.setFanOnState(false);
+    } else {
+      this.setRotationSpeed(Math.round((b / MAXFANSPEED) * 100));
+      fanRotationSpeed(String(b), this);
+    }
+  }
+
+  async setFanFasterServiceOnState(value: CharacteristicValue) {
+    debugLog(this, ['newcode', 'characteristics'], [1, 4], 'Triggered setFanFasterServiceOnState');
+    if (value) {
+      // Reset the switch to OFF after a short delay to simulate a "button"
+      setTimeout(() => {
+        this.fanFasterService.updateCharacteristic(this.platform.Characteristic.On, false);
+        debugLog(this, ['newcode', 'characteristics'], [1, 4], `reset fanFasterService switch, delay ${this.incrementalButtonsDelay} ms`);
+      }, this.incrementalButtonsDelay);
+    }
+
+    let b = this.fanStates.RotationSpeed;
+    debugLog(this, 'newcode', 1, `setFanFasterServiceOnState, b: ${b}`);
+    debugLog(this, 'newcode', 1, `setFanFasterServiceOnState, this.fanStates.On: ${this.fanStates.On}`);
+    b = b + (this.fanStates.On ? 1 : 0);
+    if (b > 7) {
+      b = 7;
+    }
+    fanRotationSpeed(String(b), this);
+    this.setRotationSpeed(Math.round((b / MAXFANSPEED) * 100));
+    fanOnState(String(1), this);
   }
 }
 
@@ -1028,6 +1141,11 @@ function makeServices(pA: BAF) {
         pA.accessory.removeService(service);
       }
     }
+  } else {
+    const service = pA.accessory.getService(pA.platform.Service.HumiditySensor);
+    if (service) {
+      pA.accessory.removeService(service);
+    }
   }
 
   if (pA.showLightAutoSwitch) {
@@ -1098,16 +1216,54 @@ function makeServices(pA: BAF) {
     zapService(pA, 'standbyLED');
   }
 
+  debugLog(pA, 'newcode', 1, `enableIncrementalButtons is ${pA.enableIncrementalButtons}`);
+  if (pA.enableIncrementalButtons) {
+    pA.downlightDarkenService = pA.accessory.getService('downlightDarkenButton') ||
+      pA.accessory.addService(pA.platform.Service.Switch, 'downlightDarkenButton', 'button-1');
+    accessoryName = capitalizeName ?  ' Darken Downlight' : ' darken downlight';
+    setName(pA, pA.downlightDarkenService, pA.Name + accessoryName);
+
+    pA.downlightDarkenService.getCharacteristic(pA.platform.Characteristic.On)
+      .onSet(pA.setDownlightDarkenServiceOnState.bind(pA));
+
+    pA.downlightLightenService = pA.accessory.getService('downlightLightenButton') ||
+      pA.accessory.addService(pA.platform.Service.Switch, 'downlightLightenButton', 'button-2');
+    accessoryName = capitalizeName ?  ' Lighten Downlight' : ' lighten downlight';
+    setName(pA, pA.downlightLightenService, pA.Name + accessoryName);
+
+    pA.downlightLightenService.getCharacteristic(pA.platform.Characteristic.On)
+      .onSet(pA.setDownlightLightenServiceOnState.bind(pA));
+
+    pA.fanSlowerService = pA.accessory.getService('fanSlowerButton') ||
+      pA.accessory.addService(pA.platform.Service.Switch, 'fanSlowerButton', 'button-3');
+    accessoryName = capitalizeName ?  ' Slower' : ' slower';
+    setName(pA, pA.fanSlowerService, pA.Name + accessoryName);
+
+    pA.fanSlowerService.getCharacteristic(pA.platform.Characteristic.On)
+      .onSet(pA.setFanSlowerServiceOnState.bind(pA));
+
+    pA.fanFasterService = pA.accessory.getService('fanFasterButton') ||
+      pA.accessory.addService(pA.platform.Service.Switch, 'fanFasterButton', 'button-4');
+    accessoryName = capitalizeName ?  ' Faster' : ' faster';
+    setName(pA, pA.fanFasterService, pA.Name + accessoryName);
+
+    pA.fanFasterService.getCharacteristic(pA.platform.Characteristic.On)
+      .onSet(pA.setFanFasterServiceOnState.bind(pA));
+
+  } else {
+    zapService(pA, 'downlightDarkenService');
+    zapService(pA, 'downlightLightenService');
+    zapService(pA, 'fanSlowerService');
+    zapService(pA, 'fanFasterService');
+  }
+
   debugLog(pA, 'progress', 1, 'leaving makeServices');
 }
 
 function zapService(pA:BAF, serviceName: string) {
   const service = pA.accessory.getService(serviceName);
   if (service) {
-    debugLog(pA, 'newcode', 1, `zapService: removing ${serviceName}`);
     pA.accessory.removeService(service);
-  } else {
-    debugLog(pA, 'newcode', 1, `zapService: no service named ${serviceName}`);
   }
 }
 
@@ -1161,8 +1317,11 @@ function networkSetup(pA: BAF) {
         }
         return;
       case 'ENETUNREACH':
-        hbLog.error(pA.Name + ' (' + pA.IP + ')' + ` is unreachable [${err.code}].  Check the correct IP is in config.json.`);
-        return;
+        // hbLog.error(pA.Name + ' (' + pA.IP + ')' + ` is unreachable [${err.code}].  Check the correct IP is in config.json.`);
+        hbLog.error(`${pA.Name} (${pA.IP}) is unreachable [${err.code}].\n` +
+          `Check the correct IP in config.json. Will retry in ${retrySeconds} seconds.`);
+        break;
+        // return;
 
       case 'ETIMEDOUT':
         hbLog.error(`${pA.Name} (${pA.IP}) connection timed out [${err.code}].\n` +
@@ -1294,6 +1453,7 @@ function backOff(errorMsgString: string, retryCount: number) : number {
 */
 
 let chunkFragment: Buffer = Buffer.alloc(0);
+let funQueue: funCall[] = [];
 
 function onData(pA: BAF, data: Buffer) {
   debugLog(pA, 'network', 8, `accessory client got: ${data.length} ${(data.length === 1 ? ' byte' : ' bytes')}`);
@@ -1359,13 +1519,28 @@ function onData(pA: BAF, data: Buffer) {
     debugLog(pA, 'network', 11, 'raw (unstuffed) chunks[' + i + ']: ' + hexFormat(unstuff(chunks[i])));
 
     const funStack: funCall[] = buildFunStack(unstuff(chunks[i]), pA);
-    debugLog(pA, 'funstack', (funStack.length === 0) ? 2 : 1, `funstack.length: ${funStack.length}`);
-    debugLog(pA, 'funstack', 1, `pA.capabilitiesEstablished: ${pA.capabilitiesEstablished}`);
-    if (pA.capabilitiesEstablished) {
+    if (pA.targetBulb === -1) {
       funStack.forEach((value) => {
-        debugLog(pA, 'funstack', 1, `  ${value[0].name}(${value[1]})`);
-        value[0](value[1], pA);
+        debugLog(pA, 'funstack', 1, `targetBulb === -1  ${value[0].name}(${value[1]})`);
       });
+      funQueue.push(...funStack);
+    } else {
+
+      debugLog(pA, 'funstack', (funStack.length === 0) ? 2 : 1, `funstack.length: ${funStack.length}`);
+      debugLog(pA, 'funstack', 1, `pA.capabilitiesEstablished: ${pA.capabilitiesEstablished}`);
+      if (pA.capabilitiesEstablished) {
+        funQueue.forEach((value) => {
+          debugLog(pA, 'funstack', 1, `funQueue.length:  ${funQueue.length})`);
+          debugLog(pA, 'funstack', 1, `funQueue:  ${value[0].name}(${value[1]})`);
+          value[0](value[1], pA);
+        });
+        funQueue = [];
+
+        funStack.forEach((value) => {
+          debugLog(pA, 'funstack', 1, `  ${value[0].name}(${value[1]})`);
+          value[0](value[1], pA);
+        });
+      }
     }
   }
 }
@@ -1390,14 +1565,14 @@ function sortFunction(a, b) {
 //   service.setCharacteristic(pA.platform.Characteristic.ConfiguredName, name);
 // }
 function setName(pA: BAF, service: Service, name: string) {
-  debugLog(pA, 'newcode', 1, `setName(pA, service, '${name}'`);
+  // debugLog(pA, 'newcode', 1, `setName(pA, service, '${name}'`);
 
   service.setCharacteristic(pA.platform.Characteristic.Name, name);
 
   if (!service.testCharacteristic(pA.platform.Characteristic.ConfiguredName)) {
-    debugLog(pA, 'newcode', 1, '  service.addCharacteristic(platform.Characteristic.ConfiguredName)');
+    // debugLog(pA, 'newcode', 1, '  service.addCharacteristic(platform.Characteristic.ConfiguredName)');
     service.addCharacteristic(pA.platform.Characteristic.ConfiguredName);
-    debugLog(pA, 'newcode', 1, `  service.setCharacteristic(platform.Characteristic.ConfiguredName, ${name})`);
+    // debugLog(pA, 'newcode', 1, `  service.setCharacteristic(platform.Characteristic.ConfiguredName, ${name})`);
     service.setCharacteristic(pA.platform.Characteristic.ConfiguredName, name);
   }
 }
@@ -1622,21 +1797,21 @@ function fanRotationSpeed(s: string, pA:BAF) {
   if (value !== 0) { // don't tell homebridge speed is zero, it only confuses it.  It'll find out it's off in due course.
     pA.fanStates.homeShieldUp = false;
     pA.fanStates.RotationSpeed = (value as number);
-    debugLog(pA, 'characteristics', 3, 'set speed to ' + pA.fanStates.RotationSpeed);
+    debugLog(pA, ['characteristics', 'newcode'], [3, 1], 'set speed to ' + pA.fanStates.RotationSpeed);
     // convert to percentage for homekit
     const speedPercent = Math.round((pA.fanStates.RotationSpeed / MAXFANSPEED) * 100);
-    debugLog(pA, 'characteristics', 3, 'update RotationSpeed: ' + speedPercent + '%');
+    debugLog(pA, ['characteristics', 'newcode'], [3, 1], 'update RotationSpeed: ' + speedPercent + '%');
     pA.fanService.updateCharacteristic(pA.platform.Characteristic.RotationSpeed, speedPercent);
 
     if (!pA.fanStates.On) {
       pA.fanStates.On = true;
-      debugLog(pA, 'characteristics', 3, 'update FanOn: ' + pA.fanStates.On + ' because (auto && speed > 0)');
+      debugLog(pA, ['characteristics', 'newcode'], [3, 1], 'update FanOn: ' + pA.fanStates.On + ' because (auto && speed > 0)');
       pA.fanService.updateCharacteristic(pA.platform.Characteristic.On, pA.fanStates.On);
     }
   } else {
     if (pA.fanStates.On) {
       pA.fanStates.On = false;
-      debugLog(pA, 'characteristics', 3, 'update FanOn: ' + pA.fanStates.On + ' because (auto && speed == 0)');
+      debugLog(pA, ['characteristics', 'newcode'], [3, 1], 'update FanOn: ' + pA.fanStates.On + ' because (auto && speed == 0)');
       pA.fanService.updateCharacteristic(pA.platform.Characteristic.On, pA.fanStates.On);
     }
   }
@@ -2177,8 +2352,11 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 [b, v] = getValue(b);
                 debugLog(pA, 'light', 1, `buildFunStack - target bulb: ${v}`);
                 funStack.splice(0, 0, [setTargetBulb, String(v)]);
-                debugLog(pA, 'light', 2, 'inserted setTargetBulb at start of funStack');
+                debugLog(pA, 'light', 1, 'inserted setTargetBulb at start of funStack');
                 // funStack.push([setTargetBulb, String(v)]);
+
+                setTargetBulb(String(v), pA);
+
                 break;
               case 85:  // light occupied
                 [b, v] = getValue(b);
@@ -2487,7 +2665,7 @@ function buildFunStack(b:Buffer, pA: BAF): funCall[] {
                 }
                 // see comment above
                 if (! enabled) {
-                  debugLog(pA, 'newcode', 1, `buildFunStack(): ${String(enabled)}`);
+                  debugLog(pA, 'newcode', 1, `buildFunStack(): "${String(enabled)}"`);
                   funStack.push([standbyLEDEnable, String(enabled)]);
                 }
                 break;

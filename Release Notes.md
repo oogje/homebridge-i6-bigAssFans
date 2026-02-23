@@ -1,5 +1,32 @@
 ## Release Notes
 
+### v0.6.1-beta9
+- address issue #38 if no humidity capability, remove humidity service if it exists.
+
+### v0.6.1-beta8
+- address issue #42 now the fan
+
+### v0.6.1-beta7
+- address issue #42 take a guess
+
+### v0.6.1-beta6
+- address issue #42 features take 2
+
+### v0.6.1-beta5
+- address issue #42 features
+
+### v0.6.1-beta4
+- address issue #42 take 2
+
+### v0.6.1-beta3
+- address issue #42
+
+### v0.6.1-beta2
+- attempt retries on ENETUNREACH
+
+### v0.6.1-beta1
+- insert code from @knmorgan to fix issue #38
+
 ### v0.6.0
 - bug fixes, see v0.6.0 beta notes below
 
