@@ -329,11 +329,11 @@ export class BigAssFans_i6PlatformAccessory {
     }
 
     if (accessory.context.device.showTemperature !== undefined) {
-        this.showTemperature = accessory.context.device.showTemperature;
+      this.showTemperature = accessory.context.device.showTemperature;
     }
 
     if (accessory.context.device.showHumidity !== undefined) {
-        this.showHumidity = accessory.context.device.showHumidity;
+      this.showHumidity = accessory.context.device.showHumidity;
     }
 
     /**
