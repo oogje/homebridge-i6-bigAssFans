@@ -49,16 +49,30 @@ Occasionally HomeKit will briefly show the light (if equipped) or the light auto
 
 ### **Installation**
 
+### Requirements
+
+* Homebridge 1.8.0 up to (but not including) 3.0.0
+* Node.js 18.20.4 or newer
+
+Homebridge 2.x is fully supported.
+
 If you are not already running homebridge you'll find how to install it in the homebridge [documentation](https://github.com/homebridge/homebridge#readme).  After you install homebridge you can install and configure the `homebridge-i6-bigassfans` plugin through `homebridge-config-ui-x` using a command line and editor as described below.
 
-#### Install homebridge-i6-bigassfans:
+#### Install from published npm package
 
 ```sh
 sudo npm install -g homebridge-i6-bigassfans
 ```
-To install a pre-release version, append it to the package name after '@'.  For example:
-```
+
+To install a specific pre-release version from npm, append the version after `@`. For example:
+
+```sh
 sudo npm install -g homebridge-i6-bigassfans@0.6.0-beta9
+```
+
+To install a specific fork
+```sh
+sudo npm install -g <github_username>/homebridge-i6-bigassfans
 ```
 
 #### **Configuration**

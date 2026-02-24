@@ -2,7 +2,7 @@
   "private": false,
   "displayName": "Big Ass Fans i6",
   "name": "homebridge-i6-bigassfans",
-  "version": "0.6.1-beta9",
+  "version": "0.6.1-beta10",
   "description": "Homebridge plugin for Big Ass Fans.",
   "license": "MIT",
   "repository": {
@@ -13,14 +13,18 @@
     "url": "https://github.com/oogje/homebridge-i6-bigAssFans/issues"
   },
   "engines": {
-    "node": ">=10.17.0",
-    "homebridge": ">=1.3.0"
+    "homebridge": "^1.8.0 || ^2.0.0-beta.0 || ^2.0.0",
+    "node": "^18.20.4 || ^20.15.1 || ^22.0.0 || ^24.0.0"
+  },
+  "peerDependencies": {
+    "homebridge": "^1.8.0 || ^2.0.0-beta.0 || ^2.0.0"
   },
   "main": "dist/index.js",
   "scripts": {
     "lint": "eslint src/**.ts --max-warnings=0",
     "watch": "npm run build && npm link && nodemon",
     "build": "rimraf ./dist && tsc",
+    "prepare": "npm run build",
     "prepublishOnly": "npm run lint && npm run build"
   },
   "keywords": [
